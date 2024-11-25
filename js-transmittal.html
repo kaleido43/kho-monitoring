@@ -1,0 +1,741 @@
+<script>
+	// Load and initialize the transmittal page with optional status or month filter
+	function transmittalElements() {
+		initializeDataTable(); // Initialize DataTable without a default status
+		setDefaultMonthFilter(); // Set the default month filter to the current month
+		loadTransmittalData(storeName, getSelectedMonth()); // Load transmittal data for the current month by default
+		setupEventHandlers(); // Set up event handlers for buttons
+		setupModals(); // Setup the add data modal
+		initializeMonthFilter(); // Initialize month filter
+		setupBulkEditMode(); // Setup bulk edit mode
+		setupFabActions(userType); // Setup FAB actions
+		setupStatusFilter(); // Setup status filter
+	}
+
+// Setup event handlers for status selection
+function setupStatusFilter() {
+	const statusItems = document.querySelectorAll('#transmittalButtonGroup .dropdown-item');
+
+	statusItems.forEach(item => {
+		item.addEventListener('click', function(event) {
+			event.preventDefault(); // Prevent default anchor behavior
+			const selectedStatus = this.textContent.trim(); // Get the selected status
+
+			if (selectedStatus === 'Refresh') {
+				resetStatusFilter(); // Reset filter and reload all data
+			} else {
+				updateStatusDropdown(selectedStatus); // Update dropdown label
+				applyStatusFilter(selectedStatus); // Filter data based on status
+			}
+		});
+	});
+}
+
+// Apply Status Filter to DataTable
+function applyStatusFilter(status) {
+	const dataTable = $('#storeTransmittalTable').DataTable();
+
+	// Set the search value based on the selected status
+	let searchValue = "";
+
+	// Use switch to set the correct search value for filtering
+	switch (status) {
+		case "Pending":
+			searchValue = "^Pending$"; // Filter only for 'Pending'
+			break;
+		case "Received":
+			searchValue = "^Received$"; // Filter only for 'Received'
+			break;
+		case "Not Received":
+			searchValue = "^Not Received$"; // Filter only for 'Not Received'
+			break;
+		default:
+			searchValue = ""; // Clear filter if the status is unrecognized
+			break;
+	}
+
+	// Apply the search filter to the DataTable for exact matches
+	dataTable.column(6).search(searchValue, true, false).draw(); // Assuming the 'Status' column is 6th
+}
+
+// Reset Status Filter
+function resetStatusFilter() {
+	resetStatusDropdown(); // Reset the dropdown label
+	$('#storeTransmittalTable').DataTable().column(6).search('').draw(); // Clear the filter
+}
+
+// Update Status Dropdown Label
+function updateStatusDropdown(status) {
+	$('#transmittalButtonGroup button').html(`<i class="fas fa-cogs fs-5"></i> ${status} <span class="visually-hidden">Toggle Dropdown</span>`);
+}
+
+// Reset Status Dropdown to default
+function resetStatusDropdown() {
+	$('#transmittalButtonGroup button').html(`<i class="fas fa-cogs fs-5"></i> Status <span class="visually-hidden">Toggle Dropdown</span>`);
+}
+
+// Month Filter Initialization
+function initializeMonthFilter() {
+	$('#filterByMonth').on('click', function() {
+		const selectedMonth = getSelectedMonth();
+		loadTransmittalData(storeName, selectedMonth);
+	});
+}
+
+// Bulk Edit Mode Setup
+
+function setupBulkEditMode() {
+	$('#bulkEditSwitch').on('change', function() {
+		if (this.checked) {
+			enableRowSelection();
+			$('#fab-main-container').removeClass('hidden');
+		} else {
+			disableRowSelection();
+			$('#fab-main-container').addClass('hidden');
+		}
+	});
+}
+
+// Enable Row Selection for Bulk Edit
+function enableRowSelection() {
+	const dataTable = $('#storeTransmittalTable').DataTable();
+	$('#storeTransmittalTable tbody').on('click', 'tr', function() {
+		const rowData = dataTable.row(this).data();
+		if ($(this).hasClass('selected')) {
+			$(this).removeClass('selected selected-row'); // Remove selected and custom class
+			selectedRows = selectedRows.filter(item => item.ID !== rowData.ID);
+		} else {
+			$(this).addClass('selected selected-row'); // Add both classes
+			selectedRows.push(rowData);
+		}
+
+		// Log the class to check if it's being applied
+		console.log($(this).attr('class'));
+	});
+}
+
+// Disable Row Selection
+function disableRowSelection() {
+	const dataTable = $('#storeTransmittalTable').DataTable();
+	$('#storeTransmittalTable tbody tr').removeClass('selected');
+	selectedRows = [];
+	$('#storeTransmittalTable tbody').off('click', 'tr');
+}
+
+// Function to set the visibility of the bulk edit switch
+function toggleBulkEditSwitch(userType) {
+    if (userType === 'Administrator') {
+        $('#bulkEditLabel').show(); // Show the switch for Administrators
+    } else if (userType === 'USER') {
+        $('#bulkEditLabel').hide(); // Hide the switch for regular users
+    }
+}
+
+// Setup event handlers for bulk actions
+function setupFabActions(userType) {
+    toggleBulkEditSwitch(userType); // Call the function to toggle visibility
+    
+    $('#bulkReceivedButton').on('click', () => processBulkUpdate('markReceived'));
+    $('#bulkNotReceivedButton').on('click', () => processBulkUpdate('markNotReceived'));
+    $('#bulkDeleteButton').on('click', () => handleBulkAction('Deleted', 'delete', processBulkDelete));
+}
+
+// Handle bulk actions with confirmation
+function handleBulkAction(actionText, actionType, actionCallback) {
+	if (selectedRows.length > 0) {
+		Swal.fire({
+			title: `Are you sure?`,
+			text: `You are about to ${actionType} ${selectedRows.length} items.`,
+			icon: 'warning',
+			showCancelButton: true,
+			confirmButtonText: `Yes, ${actionType} them`
+		}).then(result => {
+			if (result.isConfirmed) {
+				actionCallback();
+			}
+		});
+	} else {
+		Swal.fire('No rows selected', 'Please select at least one row.', 'info');
+	}
+}
+
+// Bulk Update Process for Received or Not Received
+function processBulkUpdate(actionType) {
+	console.log('Action Type received:', actionType);
+
+	const idsToUpdate = selectedRows.map(row => row.ID);
+
+	if (idsToUpdate.length === 0) {
+		console.warn('No rows selected for update.');
+		Swal.fire('Warning', 'No rows selected for update.', 'warning');
+		return; // Exit if no rows to update
+	}
+
+	const status = getStatusFromActionType(actionType); // Get status based on action type
+
+	if (!status) {
+		console.error('Invalid action type received.');
+		Swal.fire('Error', 'Invalid action type.', 'error');
+		return; // Exit function if action type is invalid
+	}
+
+	console.log('IDs to update:', idsToUpdate);
+	console.log('Status to set:', status);
+
+	const sheetName = storeName; // Assuming storeName refers to the sheet name
+
+	google.script.run.withSuccessHandler(() => {
+		Swal.fire('Success', `Selected rows were marked as ${status}!`, 'success');
+		invalidateCaches();
+		loadTransmittalData(storeName, getSelectedMonth());
+		fetchDashboardData();
+    showToast('success', `${selectedRows.length} rows marked as ${status}`);
+	}).withFailureHandler(error => {
+		console.error('Error updating status:', error);
+    showToast('error', `Failed to update: ${error.message}`);
+	}).updateBulkStatus(idsToUpdate, status, sheetName);
+}
+
+// Map action types to statuses
+function getStatusFromActionType(actionType) {
+	switch (actionType) {
+		case 'markReceived':
+			return 'RECEIVED';
+		case 'markNotReceived':
+			return 'NOT RECEIVED'; // Ensure this matches your validation rules
+		default:
+			return null; // Return null for invalid action types
+	}
+}
+
+// Bulk Delete Process
+function processBulkDelete() {
+	const idsToDelete = selectedRows.map(row => row.ID);
+	const sheetName = storeName; // Assuming storeName refers to the sheet name
+
+	google.script.run.withSuccessHandler(() => {
+		Swal.fire('Success', 'Selected rows were deleted!', 'success');
+		invalidateCaches();
+		loadTransmittalData(storeName, getSelectedMonth());
+		fetchDashboardData();
+    showToast('success', `${selectedRows.length} rows deleted`);
+	}).withFailureHandler(error => {
+		showToast('error', `Failed to delete: ${error.message}`);
+	}).deleteBulkData(idsToDelete, sheetName);
+}
+
+function setDefaultMonthFilter() {
+	const currentDate = new Date();
+	const formattedDate = currentDate.toISOString().split('T')[0].slice(0, 7); // Get YYYY-MM format
+	$('#monthFilter').val(formattedDate);
+}
+
+// Get the selected month from the input field
+function getSelectedMonth() {
+	return document.getElementById('monthFilter').value;
+}
+
+// Load transmittal data with caching, and apply status and month filtering
+function loadTransmittalData(storeName, filterCriteria = null) {
+    const cacheExpiration = 5 * 60 * 1000; // Cache expiration: 5 minutes
+    const currentTime = new Date();
+
+    // Show loading dialog immediately
+    showLoadingDialog("Loading transmittal data...");
+
+    if (transmittalDataCache && lastTransmittalFetchedTime && (currentTime - lastTransmittalFetchedTime < cacheExpiration)) {
+        console.log('Using cached transmittal data:', transmittalDataCache);
+        
+        // Use timeout to ensure UI responsiveness
+        setTimeout(() => {
+            filterData(transmittalDataCache, filterCriteria); // Filter by month or status
+            
+            // Close loading dialog
+            hideLoadingDialog();
+            
+        }, 100);
+    } else {
+        console.log('Fetching fresh transmittal data.');
+        fetchAndUpdateDataTable(storeName, filterCriteria);
+    }
+}
+
+// Fetch fresh transmittal data from the server and apply month and status filtering
+function fetchAndUpdateDataTable(storeName, filterCriteria = null) {
+    showLoadingDialog("Updating data...");
+
+    google.script.run.withSuccessHandler(response => {
+        try {
+            const data = JSON.parse(response);
+            if (Array.isArray(data)) {
+                transmittalDataCache = data;
+                lastTransmittalFetchedTime = new Date();
+                
+                // Use a timeout to ensure UI is updated before closing the dialog
+                setTimeout(() => {
+                    filterData(data, filterCriteria);
+                    
+                    // Close the loading dialog
+                    hideLoadingDialog();
+                    
+                    // Show success toast after data is loaded
+                    showToast('success', 'Transmittal data loaded successfully');
+                }, 100);
+            } else {
+                // Handle case where parsed data is not an array
+                hideLoadingDialog();
+                showToast('warning', 'No transmittal data found');
+            }
+        } catch (e) {
+            console.error("Error parsing response JSON:", e);
+            hideLoadingDialog();
+            showToast('error', 'Failed to parse transmittal data');
+        }
+    }).withFailureHandler(error => {
+        console.error("Error fetching data:", error);
+        hideLoadingDialog();
+        showToast('error', `Failed to fetch transmittal data: ${error.message}`);
+    }).getStoreTransmittalData(storeName);
+}
+
+// Filter data by month and/or status, using "Transmitted Date" as the reference
+function filterData(data, filterCriteria = null) {
+    let filteredData = data;
+
+    // Filtering by month
+    if (typeof filterCriteria === 'string' && filterCriteria.includes('-')) {
+        console.log('Filtering data by selected month:', filterCriteria);
+        const [filterYear, filterMonth] = filterCriteria.split('-').map(Number);
+        filteredData = filteredData.filter(item => {
+            const transmittedDate = new Date(item.Transmitted);
+            return transmittedDate.getFullYear() === filterYear && transmittedDate.getMonth() + 1 === filterMonth;
+        });
+    }
+
+    console.log('Filtered data:', filteredData);
+    
+    // Update DataTable
+    updateDataTable(filteredData);
+    
+    // Add toast for no data
+    if (filteredData.length === 0) {
+        showToast('warning', 'No data found for the selected criteria');
+    }
+}
+
+// Update DataTable based on the filtered data
+function updateDataTable(data) {
+	const dataTable = $('#storeTransmittalTable').DataTable();
+	dataTable.clear();
+	if (data.length > 0) {
+		dataTable.rows.add(data).draw();
+	} else {
+		dataTable.draw(); // Just redraw the table if no data is available
+	}
+}
+
+// Toggle Add Data button and Actions column visibility based on status
+function toggleAddDataButtonAndActions(status) {
+	const hideForStatuses = ['Pending', 'Received', 'Not Received'];
+	const shouldHide = hideForStatuses.includes(status);
+
+	$('#openAddModalButton').toggle(!shouldHide); // Show/hide Add button
+	const dataTable = $('#storeTransmittalTable').DataTable();
+	dataTable.column(-1).visible(!shouldHide); // Show/hide Actions column
+}
+
+// Initialize the DataTable with optional status filter
+function initializeDataTable() {
+	// Create DataTable instance
+	const dataTable = $('#storeTransmittalTable').DataTable({
+		dom: '<"top"f>rt<"bottom"lp><"clear">',
+		columns: getColumns(),
+		paging: true,
+		searching: true,
+		ordering: false,
+		info: true,
+		lengthChange: false,
+		initComplete: function() {
+			// No need to apply status filter here, as it is handled by dropdown
+		}
+	});
+
+	// Initialize event listeners
+	initializeSearchHandler(dataTable);
+}
+
+// Define columns for the DataTable
+function getColumns() {
+	return [{
+			title: 'ID',
+			data: 'ID',
+			visible: false
+		},
+		{
+			title: 'DR Date',
+			data: 'Date',
+			render: formatDate
+		},
+		{
+			title: 'Vendor',
+			data: 'Vendor'
+		},
+		{
+			title: 'DR Number',
+			data: 'DR Number'
+		},
+		{
+			title: 'Type',
+			data: 'Type'
+		},
+		{
+			title: 'Amount',
+			data: 'Amount',
+			render: formatAmount
+		},
+		{
+			title: 'Status',
+			data: 'Status',
+			render: formatStatus,
+			visible: true
+		}, // Visible status
+		{
+			title: 'Transmitted',
+			data: 'Transmitted',
+			render: formatDate,
+			visible: false
+		}, // Hidden column
+		{
+			title: 'Received',
+			data: 'Received',
+			render: formatDate,
+			visible: false
+		}, // Hidden column
+		{
+			title: 'Late',
+			data: 'Late',
+			visible: false
+		}, // Hidden column
+		{
+			title: 'Remarks',
+			data: 'Remarks',
+			visible: false
+		}, // Hidden column
+		{
+			title: 'Actions',
+			data: null,
+			render: actionButtons,
+			orderable: false
+		}
+	];
+}
+
+// Search input handler
+function initializeSearchHandler(dataTable) {
+	$('#searchInput').on('keyup', function() {
+		const searchTerm = $(this).val();
+		dataTable.search(searchTerm).draw(); // Search and redraw table on each keyup event
+	});
+}
+
+// Set up event handlers for edit and delete actions
+function setupEventHandlers() {
+	$(document).on('click', '.edit-btn', handleEdit);
+	$(document).on('click', '.delete-btn', handleDelete);
+}
+
+// Setup the add and edit data modals
+function setupModals() {
+	// Setup for Add Data Modal
+	$('#addDataModal').on('shown.bs.modal', function() {
+		$('#store').val(storeName);
+		$('#transmitted').val(new Date().toISOString().split('T')[0]);
+		resetAddModal(); // Reset the form fields
+		setupAmountInput('#amount'); // Assuming this is the ID for the amount input in the Add Modal
+	});
+
+	// Setup for Edit Data Modal
+	$('#editDataModal').on('shown.bs.modal', function() {
+		setupAmountInput('#editAmount'); // Assuming this is the ID for the amount input in the Edit Modal
+	});
+
+	// Handle form submission for adding new data
+	$('#addDataForm').off('submit').on('submit', handleAddData);
+
+	// Handle form submission for editing data
+	$('#editDataForm').off('submit').on('submit', handleEditData);
+
+	// Fetch vendor options and populate the dropdown
+	google.script.run.withSuccessHandler(populateVendorDropdown).getVendorOptions();
+}
+
+// Function to setup amount input formatting and restriction
+function setupAmountInput(selector) {
+	$(selector)
+		.off('input') // Clear previous input event
+		.on('input', function() {
+			// Allow only numbers and a single decimal point
+			const value = $(this).val().replace(/[^0-9.]/g, '');
+
+			// Ensure only one decimal point is allowed
+			const decimalCount = (value.match(/\./g) || []).length;
+			if (decimalCount > 1) {
+				const lastDotIndex = value.lastIndexOf('.');
+				$(this).val(value.substring(0, lastDotIndex + 1) + value.substring(lastDotIndex + 1).replace(/\./g, ''));
+			} else {
+				$(this).val(value);
+			}
+		})
+		.off('blur') // Clear previous blur event
+		.on('blur', function() {
+			const inputField = $(this);
+			const rawValue = inputField.val().replace(/[^0-9.]/g, '');
+			const parsedValue = parseFloat(rawValue);
+			if (!isNaN(parsedValue)) {
+				const formattedValue = formatToCurrency(parsedValue);
+				inputField.val(formattedValue);
+			} else {
+				inputField.val(''); // Clear the field if invalid
+			}
+		});
+}
+
+// Function to format numbers to accounting format with 2 decimal points
+function formatToCurrency(value) {
+	return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// Populate vendor dropdowns in the modals
+function populateVendorDropdown(data) {
+	const vendorDropdown = document.getElementById('vendor');
+	const editVendorDropdown = document.getElementById('editVendor');
+
+	// Clear existing options
+	vendorDropdown.innerHTML = '';
+	editVendorDropdown.innerHTML = '';
+
+	// Add a default "Select Vendor" option
+	const defaultOption = createDropdownOption('', 'Select Vendor', true);
+	vendorDropdown.appendChild(defaultOption.cloneNode(true));
+	editVendorDropdown.appendChild(defaultOption.cloneNode(true));
+
+	// Populate the vendor dropdowns
+	if (Array.isArray(data.vendors) && data.vendors.length > 0) {
+		data.vendors.forEach(vendor => {
+			const option = createDropdownOption(vendor, vendor);
+			vendorDropdown.appendChild(option.cloneNode(true)); // Add to Add Modal
+			editVendorDropdown.appendChild(option.cloneNode(true)); // Add to Edit Modal
+		});
+	}
+
+	// Update type field based on selected vendor in the "Add" modal
+	vendorDropdown.addEventListener('change', () => {
+		const typeInput = document.getElementById('type');
+		typeInput.value = data.vendorTypeMap[vendorDropdown.value] || ''; // Set vendor type
+	});
+
+	// Update type field based on selected vendor in the "Edit" modal
+	editVendorDropdown.addEventListener('change', () => {
+		const typeEditInput = document.getElementById('editType');
+		typeEditInput.value = data.vendorTypeMap[editVendorDropdown.value] || ''; // Set vendor type
+	});
+}
+
+// Create dropdown option element
+function createDropdownOption(value, text, disabled = false) {
+	const option = document.createElement('option');
+	option.value = value;
+	option.text = text;
+	option.disabled = disabled;
+	return option;
+}
+
+// Handle adding new transmittal data
+function handleAddData(event) {
+	event.preventDefault();
+	const formData = new FormData(document.getElementById("addDataForm"));
+	submitTransmittalData(formData, 'add');
+}
+
+// Handle editing existing transmittal data
+function handleEditData(event) {
+	event.preventDefault();
+	const formData = new FormData(document.getElementById("editDataForm"));
+	submitTransmittalData(formData, 'edit');
+}
+
+// Submit transmittal data for add/edit
+function submitTransmittalData(formData, action) {
+    const dataObject = Object.fromEntries(formData.entries());
+    const formSelector = action === 'add' ? '#addDataForm' : '#editDataForm';
+    const submitButton = setSubmitButtonState(`${formSelector} button[type="submit"]`, true, action === 'add' ? 'Submitting...' : 'Updating...');
+
+    const successMessage = action === 'add' ? 'Successfully added!' : 'Successfully updated!';
+    const apiCall = action === 'add' ? 'addData' : 'updateData';
+
+    google.script.run.withSuccessHandler(function(response) {
+        Swal.fire({
+            icon: 'success',
+            title: successMessage,
+            text: response
+        }).then(() => {
+            resetForm(formSelector);
+            invalidateCaches(); // Invalidate caches
+            loadTransmittalData(storeName, getSelectedMonth());
+            fetchDashboardData(); // Fetch updated dashboard data
+            resetSubmitButton(submitButton);
+            
+            // Add more specific toast
+            showToast('success', `Transmittal ${action === 'add' ? 'added' : 'updated'} for ${dataObject.vendor || 'vendor'}`);
+        });
+    }).withFailureHandler(error => {
+        // Add error toast
+        showToast('error', `Failed to ${action} transmittal: ${error.message}`);
+        resetSubmitButton(submitButton);
+    })[apiCall](dataObject);
+}
+
+// Handle edit button click
+function handleEdit() {
+	const rowIndex = $(this).data('row-index');
+	const rowData = $('#storeTransmittalTable').DataTable().row(rowIndex).data();
+	if (rowData) {
+		populateEditModal(rowData);
+		$('#editDataModal').modal('show');
+	}
+}
+
+// Handle delete button click with confirmation
+function handleDelete() {
+    const rowIndex = $(this).data('row-index');
+    const rowData = $('#storeTransmittalTable').DataTable().row(rowIndex).data();
+
+    Swal.fire({
+        title: 'Are you sure?',
+        text: "This action is irreversible!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel',
+    }).then((result) => {
+        if (result.isConfirmed) {
+            google.script.run.withSuccessHandler(function(response) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Deleted!',
+                    text: response
+                }).then(() => {
+                    invalidateCaches(); // Invalidate caches
+                    loadTransmittalData(storeName, getSelectedMonth());
+                    fetchDashboardData(); // Fetch updated dashboard data
+                    
+                    // Add delete toast
+                    showToast('success', `Transmittal for ${rowData.Vendor} deleted`);
+                });
+            }).withFailureHandler(error => {
+                // Add error toast for delete failure
+                showToast('error', `Failed to delete transmittal: ${error.message}`);
+            }).deleteData(rowData.ID, storeName);
+        }
+    });
+}
+
+// Invalidate cache after data operations
+function invalidateCaches() {
+	transmittalDataCache = null;
+	lastTransmittalFetchedTime = null;
+	dashboardDataCache = null; // Ensure dashboard cache is invalidated
+	lastFetchedTime = null; // Reset last fetched time
+}
+
+// Show loading dialog
+function showLoadingDialog(message) {
+	Swal.fire({
+		title: 'Loading',
+		text: message,
+		allowOutsideClick: false,
+		willOpen: () => Swal.showLoading(),
+		showConfirmButton: false
+	});
+}
+
+// Hide loading dialog
+function hideLoadingDialog() {
+	Swal.close();
+}
+
+// Utility functions for formatting and UI management
+function formatDate(data) {
+	return data ? new Date(data).toLocaleDateString() : '';
+}
+
+function formatAmount(data) {
+	return !isNaN(data) && data !== null ? parseFloat(data).toLocaleString('en-US', {
+		minimumFractionDigits: 2
+	}) : data;
+}
+
+function formatStatus(data) {
+	return data ? data.charAt(0).toUpperCase() + data.slice(1).toLowerCase() : '';
+}
+
+function actionButtons(data, type, row, meta) {
+	return `
+        <button class="btn btn-primary btn-sm edit-btn" data-row-index="${meta.row}" title="Edit">
+            <i class="fas fa-edit"></i>
+        </button>
+        <button class="btn btn-danger btn-sm delete-btn" data-row-index="${meta.row}" title="Delete">
+            <i class="fas fa-trash-alt"></i>
+        </button>
+    `;
+}
+
+// Reset form fields and hide modal
+function resetForm(selector) {
+	$(selector)[0].reset(); // Reset the form fields
+	$(selector).closest('.modal').modal('hide'); // Hide the modal
+}
+
+// Reset the add modal fields
+function resetAddModal() {
+	$('#vendor').val(''); // Reset vendor dropdown
+	$('#type').val(''); // Reset type field
+}
+
+// Set submit button state (disabled/enabled)
+function setSubmitButtonState(selector, isDisabled, text) {
+	const button = document.querySelector(selector);
+	button.disabled = isDisabled;
+	button.innerHTML = isDisabled ? `<span class="spinner-border spinner-border-sm" role="status"></span> ${text}` : 'Submit';
+	return button;
+}
+
+// Reset the submit button state
+function resetSubmitButton(button) {
+	button.disabled = false;
+	button.innerHTML = 'Submit';
+}
+
+// Populate the edit modal with row data
+function populateEditModal(rowData) {
+	$('#editId').val(rowData.ID || '');
+	$('#editDate').val(formatEditDate(rowData.Date));
+	$('#editDRnumber').val(rowData['DR Number'] || '');
+	$('#editVendor').val(rowData.Vendor || '');
+	$('#editType').val(rowData.Type || '');
+	$('#editAmount').val(parseFloat(rowData.Amount || 0).toFixed(2));
+	$('#editStatus').val(rowData.Status || '');
+	$('#editTransmitted').val(formatEditDate(rowData.Transmitted));
+	$('#editReceived').val(formatEditDate(rowData.Received));
+	$('#editLate').val(rowData.Late || '');
+	$('#editRemarks').val(rowData.Remarks || '');
+	$('#editStore').val(storeName);
+}
+
+// Format the date for the edit modal
+function formatEditDate(dateStr) {
+	if (!dateStr) return '';
+	const date = new Date(dateStr);
+	return isNaN(date.getTime()) ? '' : date.toISOString().split('T')[0];
+} 
+</script>
