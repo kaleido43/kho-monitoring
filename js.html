@@ -1,0 +1,347 @@
+<!-- CSS Libraries -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+<!-- JavaScript Libraries -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+	function initializeGlobalVariables() {
+		let dashboardPageCache = null;
+		let dashboardDataCache = null;
+		let adminDashboardPageCache = null;
+		let adminDashboardDataCache = null;
+		let lastFetchedTime = null;
+		let lastDashboardFetchedTime = null;
+		let transmittalDataCache = null;
+		let lastTransmittalFetchedTime = null;
+		let userSession = {};
+		let selectedRows = [];
+	}
+
+	// Document ready event listener
+	$(document).ready(function() {
+		resetGlobalVariables();
+		initializeGlobalVariables();
+		showLoadingScreen('Please Wait...', 'We are organizing the latest information for you.');
+		initializeSidebar();
+
+		if (userType === 'Administrator') {
+			$('.transmittal-menu-item').hide();
+		}
+
+		loadDashboardPage();
+
+		// Set indicator elements if they exist
+		setIndicatorElements(name, userType, userAddress, storeName);
+
+		// Check for missing elements in the DOM
+		checkMissingElements(['indicator-name', 'indicator-address', 'indicator-store', 'lockName', 'lockType']);
+	});
+
+	// Function to show loading screen
+	function showLoadingScreen(title, text) {
+		Swal.fire({
+			title: title,
+			text: text,
+			allowOutsideClick: false,
+			didOpen: () => Swal.showLoading()
+		});
+	}
+
+	// Function to show a toast notification
+	function showToast(icon, title, position = 'top-end') {
+		Swal.fire({
+			toast: true,
+			position: position,
+			icon: icon,
+			title: title,
+			showConfirmButton: false,
+			timer: 3000,
+			timerProgressBar: true
+		});
+	}
+
+	// Check for missing elements in the DOM
+	function checkMissingElements(elementIds) {
+		const missingElements = elementIds.filter(id => !document.getElementById(id));
+		if (missingElements.length) {
+			console.warn('The following elements are missing from the DOM:', missingElements.join(', '));
+		}
+	}
+
+	// Initialize the sidebar
+	function initializeSidebar() {
+		$('.sidebar-dropdown-menu').slideUp('fast');
+
+		// Handle dropdown menu clicks
+		$(document).on('click', '.sidebar-menu-item.has-dropdown > a', function(e) {
+			e.preventDefault();
+			const $parent = $(this).parent();
+
+			// Close other dropdowns if not focused
+			if (!$parent.hasClass('focused')) {
+				$parent.parent().find('.sidebar-dropdown-menu').slideUp('fast');
+				$parent.parent().find('.has-dropdown').removeClass('focused');
+			}
+
+			// Toggle the clicked dropdown
+			$(this).next().slideToggle('fast');
+			$parent.toggleClass('focused');
+		});
+
+		// Toggle sidebar collapse
+		$('.sidebar-toggle').click(function() {
+			$('.sidebar').toggleClass('collapsed');
+			$('.sidebar-dropdown-menu').slideUp('fast'); // Close all dropdowns when toggling
+			$('.sidebar-menu-item.has-dropdown, .sidebar-dropdown-menu-item.has-dropdown').removeClass('focused');
+		});
+
+		// Handle overlay clicks to collapse sidebar
+		$('.sidebar-overlay').click(function() {
+			$('.sidebar').addClass('collapsed');
+			$('.sidebar-dropdown-menu').slideUp('fast');
+			$('.sidebar-menu-item.has-dropdown, .sidebar-dropdown-menu-item.has-dropdown').removeClass('focused');
+		});
+
+		// Automatically collapse sidebar on small screens
+		if (window.innerWidth < 768) {
+			$('.sidebar').addClass('collapsed');
+		}
+
+		// Handle window resize to toggle sidebar
+		$(window).resize(function() {
+			if (window.innerWidth >= 768) {
+				$('.sidebar').removeClass('collapsed'); // Show sidebar on larger screens
+			}
+		});
+	}
+
+	// Load a specific page and cache the content if needed
+	function loadPage(page, callback) {
+    if (page === 'transmittal') {
+        if (transmittalDataCache) {
+            console.log('Using cached transmittal data.');
+            document.getElementById('content-page').innerHTML = transmittalPageCache;
+            updatePageIndicator('transmittal');
+            transmittalElements(); // Initialize transmittal page elements
+
+            // Add event listener for transmittal data loaded
+            const transmittalLoadHandler = (event) => {
+                document.removeEventListener('transmittalDataLoaded', transmittalLoadHandler);
+            };
+            
+            document.addEventListener('transmittalDataLoaded', transmittalLoadHandler);
+
+            // Trigger transmittal data loaded event
+            const transmittalLoadedEvent = new CustomEvent('transmittalDataLoaded');
+            document.dispatchEvent(transmittalLoadedEvent);
+
+            if (callback) callback();
+        } else {
+            console.log('Fetching fresh transmittal page content.');
+            showLoadingScreen('Loading Transmittal...', 'Fetching the latest data for you.');
+
+            // Add event listener for transmittal data loaded
+            const transmittalLoadHandler = (event) => {
+                document.removeEventListener('transmittalDataLoaded', transmittalLoadHandler);
+            };
+            
+            document.addEventListener('transmittalDataLoaded', transmittalLoadHandler);
+
+            google.script.run.withSuccessHandler(function(content) {
+                transmittalPageCache = content;
+                document.getElementById('content-page').innerHTML = content;
+                updatePageIndicator('transmittal');
+                transmittalElements(); // Initialize transmittal page elements
+                lastTransmittalFetchedTime = new Date();
+
+                // Trigger transmittal data loaded event
+                const transmittalLoadedEvent = new CustomEvent('transmittalDataLoaded');
+                document.dispatchEvent(transmittalLoadedEvent);
+
+                if (callback) callback();
+            }).loadPageContent('transmittal');
+        }
+    } else if (page === 'dashboard') {
+        showLoadingScreen('Loading Dashboard...', 'Please wait while we fetch the content.');
+        
+        // Add event listener for dashboard data loaded
+        const dashboardLoadHandler = (event) => {
+            // Remove the event listener to prevent multiple triggers
+            document.removeEventListener('dashboardDataLoaded', dashboardLoadHandler);
+            
+            // Show success toast
+            showToast('success', 'Dashboard loaded successfully!');
+        };
+        
+        // Add event listener before loading the page
+        document.addEventListener('dashboardDataLoaded', dashboardLoadHandler);
+
+        google.script.run.withSuccessHandler(function(content) {
+            document.getElementById('content-page').innerHTML = content;
+            updatePageIndicator(page);
+            
+            if (callback) callback();
+        }).loadPageContent(page);
+    } else {
+        // Existing logic for other pages
+        showLoadingScreen('Loading Page...', 'Please wait while we fetch the content.');
+        google.script.run.withSuccessHandler(function(content) {
+            document.getElementById('content-page').innerHTML = content;
+            updatePageIndicator(page);
+            if (callback) callback();
+        }).loadPageContent(page);
+    }
+}
+
+	// Update the page indicator based on the page
+	function updatePageIndicator(page) {
+		const indicator = document.getElementById('page-indicator');
+		if (indicator) {
+			indicator.innerText = page === 'transmittal' ? 'Transmittal' 
+				: page === 'dashboard' ? 'Dashboard' 
+				: page === 'admin-dashboard' ? 'Admin Dashboard' 
+				: 'Unknown Page';
+		} else {
+			console.warn('Page indicator element is missing from the DOM.');
+		}
+	}
+
+	// Set the username after login
+	function setUsername(username) {
+		window.username = username;
+	}
+
+	// Logout function
+	function logout() {
+		showLoadingScreen('Logging out...', 'Please wait while we log you out.');
+
+		resetGlobalVariables();
+		google.script.run.withSuccessHandler(function(content) {
+			document.open();
+			document.write(content);
+			document.close();
+			Swal.close();
+			showToast('success', 'Logged out successfully!');
+		}).logout();
+	}
+
+	// Unlock function
+	function unlock(event) {
+		event.preventDefault(); // Prevent form submission behavior
+		const submitButton = event.target; // The clicked button is the target
+		submitButton.disabled = true; // Disable the button
+		submitButton.innerHTML = 'Unlocking... <span class="loader"></span>'; // Show loader
+
+		const passwordInput = document.querySelector('#lockscreen input[placeholder="Password"]');
+		const password = passwordInput.value;
+		const injectedUsername = window.username; // Injected username variable
+		const injectedPassword = window.password; // Injected password variable
+
+		setTimeout(() => {
+			if (injectedUsername === username && password === injectedPassword) {
+				console.log('Unlock successful:', {
+					username
+				});
+				hideLockscreen(); // Hide the lockscreen
+				setUsername(injectedUsername);
+				resetUserSession();
+				showToast('success', 'Unlocked successfully!');
+			} else {
+				// Show the SweetAlert error
+				Swal.fire({
+					icon: 'error',
+					title: 'Incorrect Password',
+					text: 'Please check your credentials and try again.',
+					confirmButtonText: 'Try Again',
+					backdrop: true, // Ensures proper backdrop behavior
+					allowOutsideClick: false // Prevent closing the dialog by clicking outside
+				}).then(() => {
+					showLockScreen(); // Re-show the lock screen after the alert
+				});
+
+				// Reset the button state
+				submitButton.disabled = false; // Re-enable the button
+				submitButton.innerHTML = 'Unlock'; // Reset button text
+			}
+		}, 1000); // Show loading state for 1 second
+	}
+
+	// Function to reset user session data after unlocking
+	function resetUserSession() {
+		userSession = {};
+	}
+
+	// Function to reset global variables
+	function resetGlobalVariables() {
+		dashboardDataCache = null;
+		dashboardPageCache = null;
+		adminDashboardPageCache = null;
+		adminDashboardDataCache = null;
+		lastFetchedTime = null;	
+		lastDashboardFetchedTime = null;
+		transmittalDataCache = null;
+		lastTransmittalFetchedTime = null;
+		userSession = {};
+		selectedRows = [];
+	}
+
+	// Set indicator elements
+	function setIndicatorElements(name, userType, userAddress, storeName) {
+		const indicatorNameElement = document.getElementById('indicator-name');
+		const indicatorAddressElement = document.getElementById('indicator-address');
+		const indicatorStoreElement = document.getElementById('indicator-store');
+		const lockNameElement = document.getElementById('lockName');
+		const lockTypeElement = document.getElementById('lockType');
+
+		if (lockNameElement && lockTypeElement) {
+			lockNameElement .innerText = name || 'Unknown';
+			lockTypeElement.innerText = userType || 'Guest';
+		} else {
+			console.warn('Lock elements (lockName, lockType) are missing from the DOM.');
+		}
+
+		if (indicatorNameElement && indicatorAddressElement && indicatorStoreElement) {
+			if (userType === 'Administrator') {
+				indicatorNameElement.innerText = 'ADMIN';
+				indicatorAddressElement.innerText = '';
+				indicatorStoreElement.innerText = '';
+			} else if (userType === 'USER') {
+				indicatorNameElement.innerText = name || 'Unknown';
+				indicatorAddressElement.innerText = userAddress || '';
+				indicatorStoreElement.innerText = storeName || '';
+			} else {
+				indicatorNameElement.innerText = 'Guest';
+				indicatorAddressElement.innerText = '';
+				indicatorStoreElement.innerText = '';
+			}
+		} else {
+			console.warn('One or more elements (indicator-name, indicator-address, indicator-store) are missing from the DOM.');
+		}
+	}
+
+	// Show lock screen
+	function showLockScreen() {
+		$('#lockscreen').show(); // Show lockscreen when called
+		$('#lockscreen input[placeholder="Password"]').val(''); // Clear the password field
+		isLocked = true; // Set lock state to true
+
+		const submitButton = document.querySelector('#lockscreen button[type="button"]');
+		submitButton.disabled = false; // Re-enable the button
+		submitButton.innerHTML = 'Unlock'; // Reset button text
+	}
+
+	// Hide the lockscreen
+	function hideLockscreen() {
+		$('#lockscreen').hide(); // Hide lockscreen when called
+		isLocked = false; // Set lock state to false
+	}
+</script>
