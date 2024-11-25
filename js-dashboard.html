@@ -1,0 +1,694 @@
+<script>
+// Modify loadDashboardPage to handle returning to admin dashboard
+function loadDashboardPage() {
+    console.log('Current user type:', userType);
+
+    // Delegate to separate functions based on user type
+    if (userType === 'Administrator') {
+        // Check if we have a stored admin dashboard state
+        if (adminDashboardPageCache && adminDashboardDataCache) {
+            // Restore admin dashboard state
+            dashboardPageCache = adminDashboardPageCache;
+            dashboardDataCache = adminDashboardDataCache;
+
+            // Clear the stored admin dashboard state
+            adminDashboardPageCache = null;
+            adminDashboardDataCache = null;
+
+            // Load admin dashboard
+            loadAdminDashboardPage();
+        } else {
+            // Standard admin dashboard load
+            loadAdminDashboardPage();
+        }
+    } else {
+        loadUserDashboardPage();
+    }
+}
+
+function loadUserDashboardPage(storeId = null, isStoreSpecificView = false) {
+    console.log('Loading standard dashboard for user type:', userType);
+
+    // Show loading dialog immediately
+    showLoadingDialog('Loading Dashboard...');
+
+    // Load the dashboard page
+    loadPage('dashboard', function() {
+        const contentPage = document.getElementById('content-page');
+        if (contentPage) {
+            dashboardPageCache = contentPage.innerHTML;
+            lastDashboardFetchedTime = new Date();
+
+            // Determine data loading strategy
+            const cacheExpiration = 5 * 60 * 1000; // 5 minutes
+            const currentTime = new Date();
+
+            if (isStoreSpecificView) {
+                // Always fetch fresh data for store-specific view
+                fetchDashboardData(storeId);
+            } else {
+                // Check if cached data exists and is still valid
+                if (dashboardDataCache && 
+                    (currentTime - lastDashboardFetchedTime < cacheExpiration)) {
+                    console.log('Using cached dashboard data');
+                    
+                    // Populate dashboard with cached data immediately
+                    setTimeout(() => {
+                        populateDashboard();
+                        processDashboardData(dashboardDataCache);
+                        hideLoadingDialog();
+                    }, 100);
+
+                    // Fetch fresh data in the background
+                    fetchDashboardData(null, true);
+                } else {
+                    // No valid cached data - fetch fresh data
+                    console.log('Fetching fresh dashboard data');
+                    fetchDashboardData();
+                }
+            }
+        } else {
+            console.error("Element with ID 'content-page' not found.");
+            hideLoadingDialog();
+        }
+    });
+}
+
+// Modify fetchDashboardData to enhance caching
+function fetchDashboardData(storeId = null, isBackgroundRefresh = false) {
+    const targetStoreName = storeId || storeName;
+
+    google.script.run
+        .withSuccessHandler(function(data) {
+            try {
+                const newDashboardData = JSON.parse(data);
+                
+                // Update cache only if data is different or no existing cache
+                if (!dashboardDataCache || !isEqual(dashboardDataCache, newDashboardData)) {
+                    dashboardDataCache = newDashboardData;
+                    lastDashboardFetchedTime = new Date();
+
+                    // Only repopulate and process if not a background refresh
+                    // or if there's no existing data
+                    if (!isBackgroundRefresh || !dashboardDataCache) {
+                        populateDashboard();
+                        processDashboardData(dashboardDataCache);
+                        
+                        // Show success toast
+                        showToast('success', 'Dashboard data updated successfully');
+                    }
+                } else {
+                    // Show toast if data is unchanged during background refresh
+                    if (isBackgroundRefresh) {
+                        showToast('info', 'No new dashboard updates');
+                    }
+                }
+            } catch (error) {
+                handleDashboardError(`Failed to process dashboard data: ${error.message}`, isBackgroundRefresh);
+            }
+            
+            // Only hide loading dialog if not a background refresh
+            if (!isBackgroundRefresh) {
+                hideLoadingDialog();
+            }
+        })
+        .withFailureHandler(error => {
+            handleDashboardError(`Failed to fetch dashboard data: ${error.message}`, isBackgroundRefresh);
+            
+            // If not background refresh, ensure loading dialog is closed
+            if (!isBackgroundRefresh) {
+                hideLoadingDialog();
+            }
+        })
+        .getDashboardData(targetStoreName);
+}
+
+// Add a function to check cache validity
+function isDashboardCacheValid() {
+    if (!dashboardDataCache) return false;
+
+    const cacheExpiration = 5 * 60 * 1000; // 5 minutes
+    const currentTime = new Date();
+
+    return (currentTime - lastDashboardFetchedTime < cacheExpiration);
+}
+
+// Compare two objects for equality
+function isEqual(obj1, obj2) {
+  return JSON.stringify(obj1) === JSON.stringify(obj2);
+}
+
+// Modify invalidateDashboardCache to be more comprehensive
+function invalidateDashboardCache() {
+    dashboardDataCache = null;
+    lastDashboardFetchedTime = null;
+    
+    // Optionally, you can add additional cleanup
+    if (window.barChartInstance) {
+        window.barChartInstance.destroy();
+    }
+    if (window.pieChartInstance) {
+        window.pieChartInstance.destroy();
+    }
+}
+
+// Modify showLoadingDialog to use a more consistent loading screen
+function showLoadingDialog(message) {
+    Swal.fire({
+        title: 'Loading',
+        html: `<div class="flex flex-col items-center">
+                <div class="mb-4">${message}</div>
+                <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12"></div>
+               </div>`,
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => {
+            // Optional: Add any additional loading animations or logic
+        }
+    });
+}
+
+// Enhanced error handling with toast notifications
+function handleDashboardError(errorMessage, isBackground = false) {
+    console.error('Dashboard Error:', errorMessage);
+
+    // If not a background refresh, show a more detailed error
+    if (!isBackground) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Dashboard Error',
+            text: errorMessage,
+            confirmButtonText: 'OK',
+            confirmButtonColor: '#3085d6'
+        });
+    }
+
+    // Always show a toast notification
+    showToast('error', errorMessage);
+}
+
+// Hide loading dialog
+function hideLoadingDialog() {
+    Swal.close();
+}
+
+// Populate the dashboard UI with fetched data
+function populateDashboard() {
+  const dashboardData = dashboardDataCache || {};
+
+  // Get the current month and year
+  const currentDate = new Date();
+  const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`; 
+
+  // Safe extraction with default values and null checks
+  const extractCount = (countObj, key, defaultValue = 0) => {
+    try {
+      return (countObj && countObj[key]) || defaultValue;
+    } catch (error) {
+      console.warn(`Error extracting count for key: ${key}`, error);
+      return defaultValue;
+    }
+  };
+
+  // Safely extract counts with fallback mechanisms
+  const totalDRCount = extractCount(dashboardData.drCount, currentMonthKey);
+  const totalLateCount = extractCount(dashboardData.lateCount, currentMonthKey);
+  const totalPendingCount = extractCount(dashboardData, 'pendingCount');
+  const totalReceivedCount = extractCount(dashboardData, 'receivedCount');
+  const totalNotReceivedCount = extractCount(dashboardData, 'notReceivedCount');
+  const weeklyDRCount = extractCount(dashboardData, 'weeklyDRCount');
+
+  // Populate the summary dashboard elements
+  const elements = [
+    { id: 'weeklyDRCount', value: weeklyDRCount },
+    { id: 'lateCount', value: totalLateCount },
+    { id: 'drCount', value: totalDRCount },
+    { id: 'pendingCount', value: totalPendingCount },
+    { id: 'receivedCount', value: totalReceivedCount },
+    { id: 'notReceivedCount', value: totalNotReceivedCount },
+    { id: 'navNew', value: weeklyDRCount },
+    { id: 'navMonthly', value: totalDRCount },
+    { id: 'navLate', value: totalLateCount },
+    { id: 'navPending', value: totalPendingCount }
+  ];
+
+  // Update the UI elements with values
+  elements.forEach(el => {
+    const element = document.getElementById(el.id);
+    if (element) {
+      element.innerText = el.value;
+    } else {
+      console.warn(`Element with id ${el.id} not found`);
+    }
+  });
+
+  // Populate weekly transmittal table
+  populateWeeklyTransmittalTable(
+    (dashboardData.weeklyTransmittalData || [])
+  );
+}
+
+// Enhanced error-safe version of populateWeeklyTransmittalTable
+function populateWeeklyTransmittalTable(data = []) {
+  const tableBody = document.querySelector('.table-container tbody');
+  
+  // Validate table body exists
+  if (!tableBody) {
+    console.error('Table body not found');
+    return;
+  }
+
+  tableBody.innerHTML = '';
+
+  const { start, end } = getCurrentWeekDates();
+
+  // Filter data for the current week (based on Transmitted Date)
+  const filteredData = data.filter(row => {
+    try {
+      const transmittedDate = new Date(row.Transmitted);
+      return transmittedDate >= start && transmittedDate <= end;
+    } catch (error) {
+      console.warn('Invalid date in transmittal data', row, error);
+      return false;
+    }
+  });
+
+  if (filteredData.length === 0) {
+    tableBody.innerHTML = '<tr><td colspan="5">No data available for this week.</td></tr>';
+    return;
+  }
+
+  // Populate the table with the filtered data
+  filteredData.forEach(row => {
+    try {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${row['DR Number'] || 'N/A'}</td>
+        <td>${row.Vendor || 'Unknown'}</td>
+        <td>$${parseFloat(row.Amount || 0).toFixed(2)}</td>
+        <td><span class="bg-${getStatusColor(row.Status)}-200 text-${getStatusColor(row.Status)}-800 px-2 py-1 rounded">${row.Status || 'Unknown'}</span></td>
+        <td>${row.Remarks || ''}</td>`;
+      tableBody.appendChild(tr);
+    } catch (error) {
+      console.warn('Error processing transmittal row', row, error);
+    }
+  });
+}
+
+// Helper function to get current week date range (Monday to Sunday)
+function getCurrentWeekDates() {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const distanceToMonday = (dayOfWeek + 6) % 7;
+
+  const firstDayOfWeek = new Date(today);
+  firstDayOfWeek.setDate(today.getDate() - distanceToMonday);
+  firstDayOfWeek.setHours(0, 0, 0, 0);
+
+  const lastDayOfWeek = new Date(firstDayOfWeek);
+  lastDayOfWeek.setDate(firstDayOfWeek.getDate() + 6);
+  lastDayOfWeek.setHours(23, 59, 59, 999);
+
+  return {
+    start: firstDayOfWeek,
+    end: lastDayOfWeek
+  };
+}
+
+// Helper function to check if a date falls within a given date range
+function isDateInRange(date, range) {
+  const normalizedDate = new Date(date);
+  normalizedDate.setHours(0, 0, 0, 0);
+  return normalizedDate >= range.start && normalizedDate <= range.end;
+}
+
+// Get the appropriate color for status
+function getStatusColor(status) {
+  switch (status.toLowerCase()) {
+    case 'received':
+      return 'green';
+    case 'pending':
+      return 'yellow';
+    case 'not received':
+      return 'red';
+    default:
+      return 'gray';
+  }
+}
+
+// Modify processDashboardData to add more robust error handling
+function processDashboardData(dashboardData) {
+    try {
+        console.log('Dashboard Data:', dashboardData);
+
+        if (!dashboardData || !dashboardData.monthlyData) {
+            showToast('warning', 'No dashboard data available');
+            return;
+        }
+
+        let monthlyData = [];
+
+        if (Array.isArray(dashboardData.monthlyData)) {
+            monthlyData = dashboardData.monthlyData.map((data, index) => ({
+                month: data.month || `2024-${index + 1}`,
+                totalDR: data.totalDR || 0,
+                lateDR: data.lateDR || 0
+            }));
+        } else {
+            monthlyData = Object.keys(dashboardData.monthlyData).map(monthKey => ({
+                month: monthKey,
+                totalDR: dashboardData.monthlyData[monthKey].totalDR || 0,
+                lateDR: dashboardData.monthlyData[monthKey].lateDR || 0
+            }));
+        }
+
+        // Validate data before chart initialization
+        if (monthlyData.length === 0) {
+            showToast('warning', 'Insufficient data for charts');
+            return;
+        }
+
+        // Initialize charts
+        initializeBarChart(monthlyData);
+        initializePieChart(dashboardData.vendorCounts || {});
+
+        // Trigger a custom event to signal dashboard data is fully loaded
+        const dashboardLoadedEvent = new CustomEvent('dashboardDataLoaded', { 
+            detail: { page: 'dashboard' } 
+        });
+        document.dispatchEvent(dashboardLoadedEvent);
+
+    } catch (error) {
+        handleDashboardError(`Chart initialization failed: ${error.message}`);
+    }
+}
+
+function initializeBarChart(monthlyData) {
+  try {
+    // Destroy existing chart if it exists
+    if (window.barChartInstance) {
+      window.barChartInstance.destroy();
+    }
+
+    const barCtx = document.getElementById('barChart');
+    if (!barCtx) {
+      throw new Error('Bar chart canvas not found');
+    }
+
+    // Validate monthlyData
+    if (!monthlyData || monthlyData.length === 0) {
+      showToast('warning', 'No data available for bar chart');
+      return;
+    }
+
+    const labels = monthlyData.map(data => formatMonth(data.month));
+    const lateDRPercentages = monthlyData.map(data => 
+      calculateLateDRPercentage(data.lateDR, data.totalDR)
+    );
+    const tolerableLimit = 10;
+
+    window.barChartInstance = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          createDataset('Late Submission Percentage (%)', 
+            lateDRPercentages, 
+            'rgba(255, 152, 0, 0.9)', 
+            'rgba(255, 87, 34, 1)', 
+            true
+          ),
+          createDataset('Tolerable Limit (10%)', 
+            Array(monthlyData.length).fill(tolerableLimit), 
+            'rgba(76, 175, 80, 0.7)', 
+            'rgba(56, 142, 60, 1)'
+          )
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 1500,
+          easing: 'easeOutQuart'
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100, // Set max to 100% for consistent percentage scale
+            title: {
+              display: true,
+              text: 'Percentage (%)',
+              font: {
+                weight: 'bold',
+                size: 14
+              }
+            },
+            grid: {
+              color: 'rgba(0, 0, 0, 0.05)',
+              borderDash: [5, 5]
+            },
+            ticks: {
+              font: {
+                size: 12
+              },
+               stepSize: 20, // This sets the step size to 20
+              callback: (value) => value + '%' // Append % to y-axis ticks
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Month',
+              font: {
+                weight: 'bold',
+                size: 14
+              }
+            },
+            grid: {
+              display: false
+            },
+            ticks: {
+              font: {
+                size: 12
+              }
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              font: {
+                size: 14,
+                weight: 'bold'
+              },
+              padding: 20
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (tooltipItem) => formatBarTooltip(tooltipItem, monthlyData)
+            },
+            titleFont: {
+              size: 16,
+              weight: 'bold'
+            },
+            bodyFont: {
+              size: 14
+            },
+            padding: 12,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)'
+          }
+        }
+      }
+    });
+
+    // Optional: Add resize listener
+    window.addEventListener('resize', () => {
+      if (window.barChartInstance) {
+        window.barChartInstance.resize();
+      }
+    });
+
+  } catch (error) {
+    console.error('Bar Chart Initialization Error:', error);
+    showToast('error', `Failed to initialize bar chart: ${error.message}`);
+  }
+}
+
+function createDataset(label, data, backgroundColor, borderColor, isGradient = false) {
+  return {
+    label: label,
+    data: data,
+    backgroundColor: isGradient ? createGradient() : backgroundColor,
+    borderColor: borderColor,
+    borderWidth: 2,
+    barThickness: 35,
+    hoverBackgroundColor: backgroundColor.replace('0.7', '1'),
+    hoverBorderColor: borderColor,
+    hoverBorderWidth: 3,
+  };
+}
+
+function createGradient() {
+  const ctx = document.getElementById('barChart').getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+  gradient.addColorStop(0, 'rgba(255, 152, 0, 1)');
+  gradient.addColorStop(1, 'rgba(255, 87, 34, 1)');
+  return gradient;
+}
+
+function initializePieChart(vendorCounts) {
+  try {
+    // Destroy existing chart if it exists
+    if (window.pieChartInstance) {
+      window.pieChartInstance.destroy();
+    }
+
+    const pieCtx = document.getElementById('pieChart');
+    if (!pieCtx) {
+      throw new Error('Pie chart canvas not found');
+    }
+
+    // Filter out zero-count vendors
+    const vendors = Object.keys(vendorCounts).filter(
+      vendor => vendorCounts[vendor] > 0
+    );
+    const counts = vendors.map(vendor => vendorCounts[vendor]);
+
+    // Check if there's data
+    if (vendors.length === 0) {
+      showToast('warning', 'No vendor data available');
+      return;
+    }
+
+    window.pieChartInstance = new Chart(pieCtx, {
+      type: 'pie',
+      data: {
+        labels: vendors,
+        datasets: [{
+          label: 'Vendor Distribution ',
+          data: counts,
+          backgroundColor: generateColors(vendors.length),
+          borderColor: '#ffffff',
+          borderWidth: 3,
+          hoverOffset: 15,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: {
+          padding: {
+            left: 25,
+            right: 25,
+            top: 25,
+            bottom: 25
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: {
+              font: {
+                size: 12,
+                weight: 'bold'
+              },
+              color: '#374151',
+              padding: 15,
+              generateLabels: (chart) => {
+                const data = chart.data;
+                return data.labels.map((label, index) => {
+                  const value = data.datasets[0].data[index];
+                  return {
+                    text: `${label}: ${value}`, // Removed percentage from legend
+                    fillStyle: data.datasets[0].backgroundColor[index],
+                    hidden: false,
+                    index: index
+                  };
+                });
+              }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (tooltipItem) => {
+                const vendor = vendors[tooltipItem.dataIndex];
+                const count = counts[tooltipItem.dataIndex];
+                return `${vendor}: ${count}`; // Tooltip shows count only
+              }
+            },
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            titleFont: {
+              size: 16,
+              weight: 'bold'
+            },
+            bodyFont: {
+              size: 14
+            },
+            padding: 12
+          }
+        },
+        animation: {
+          animateRotate: true,
+          animateScale: true,
+          duration: 1500,
+          easing: 'easeOutQuart'
+        }
+      }
+    });
+
+    // Add resize listener
+    window.addEventListener('resize', () => {
+      if (window.pieChartInstance) {
+        window.pieChartInstance.resize();
+      }
+    });
+
+  } catch (error) {
+    console.error('Pie Chart Initialization Error:', error);
+    showToast('error', `Failed to initialize pie chart: ${error.message}`);
+  }
+}
+
+function calculateLateDRPercentage(lateDR, totalDR) {
+  return totalDR > 0 ? (lateDR / totalDR) * 100 : 0;
+}
+
+function formatBarTooltip(tooltipItem, monthlyData) {
+  const monthIndex = tooltipItem.dataIndex;
+  const {
+    lateDR,
+    totalDR
+  } = monthlyData[monthIndex];
+  const percentage = calculateLateDRPercentage(lateDR, totalDR).toFixed(2);
+  return `${lateDR} of ${totalDR} documents submitted late (${percentage}%)`;
+}
+
+function formatPieTooltip(tooltipItem, vendors, counts) {
+  const index = tooltipItem.dataIndex;
+  return `${vendors[index]}: ${counts[index]}`;
+}
+
+function formatMonth(monthKey) {
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const [year, month] = monthKey.split('-');
+  return `${monthNames[parseInt(month, 10) - 1]} ${year}`;
+}
+
+function generateColors(count) {
+  const colors = [
+    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+    '#9966FF', '#FF9F40', '#FF4081', '#3F51B5',
+    '#2196F3', '#FFC107', '#9C27B0', '#8BC34A',
+    '#FF5722', '#009688', '#795548', '#607D8B'
+  ];
+  return Array.from({
+    length: count
+  }, (_, i) => colors[i % colors.length]);
+} 
+</script>
