@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- start: Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@2.5.0/fonts/remixicon.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <title>Foxy - Blank Page</title>
+
+  <style>
+    .custom-header {
+    width: 200px; /* Adjust width as needed */
+    text-align: center; /* Center the text */
+    }
+
+    .list-group-item {
+      transition: background-color 0.3s ease;
+    }
+
+    .list-group-item:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+      /* Light grey on hover */
+    }
+
+    .badge {
+      font-weight: bold;
+    }
+
+    .fs-7 {
+      font-size: 0.875rem;
+      /* Smaller font size for descriptions */
+    }
+
+    /* Ensure icons are styled */
+    .list-group-item .fa-store {
+      font-size: 1.2rem;
+      /* Icon size */
+      color: #6c757d;
+      /* Gray color for icons */
+    }
+
+    #lockscreen {
+      position: fixed;
+      /* Fixes the position */
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #f9f9f9;
+      /* Light background color */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      /* Make sure it’s above other content */
+    }
+
+    .swal2-container {
+      z-index: 10000 !important;
+      /* Ensure SweetAlert has a higher z-index */
+    }
+
+    .lockscreen-content {
+      background: white;
+      /* Content background */
+      padding: 2rem;
+      /* Padding around the content */
+      border-radius: 8px;
+      /* Rounded corners */
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      /* Slight shadow for depth */
+    }
+
+    .flex-shrink-0 .img-sm {
+      width: 50px;
+      /* Adjust the width as needed */
+      height: 50px;
+      /* Adjust the height as needed */
+      border-radius: 50%;
+      /* Ensures the image remains circular */
+      object-fit: cover;
+      /* Ensures the image fits within the circular frame */
+      border: 2px solid #e0e0e0;
+      /* Optional: add a subtle border for emphasis */
+    }
+
+    .custom-index-dropdown {
+      width: 450px;
+      /* Fixed width as requested */
+      padding: 1.5rem;
+      /* Adjusted padding for better layout */
+    }
+
+    .custom-index-dropdown .navbar-profile-image {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+    }
+
+    .custom-index-dropdown .dropdown-menu-header {
+      border-bottom: 1px solid #e9ecef;
+      padding-bottom: 1rem;
+    }
+
+    .custom-index-dropdown .dropdown-menu-header img {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+    }
+
+    .custom-index-dropdown .dropdown-menu-header h5 {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .custom-index-dropdown .dropdown-menu-header .text-muted {
+      font-size: 0.9rem;
+      color: #6c757d;
+    }
+
+    .custom-index-dropdown .list-group-item {
+      border: none;
+      padding: 0.75rem 1rem;
+    }
+
+    .custom-index-dropdown .list-group-item .h2 {
+      margin: 0;
+    }
+
+    .custom-index-dropdown .list-group-item .text-primary {
+      font-size: 1.5rem;
+    }
+
+    .custom-index-dropdown .list-group-item .fw-semibold {
+      font-weight: 600;
+    }
+
+    .custom-index-dropdown .list-group-item .fw-bold {
+      font-weight: 700;
+    }
+
+    .custom-index-dropdown .list-group-item .text-body-emphasis {
+      color: #343a40;
+    }
+
+    /* Adjust padding for better alignment inside dropdown */
+    .custom-index-dropdown .dropdown-item {
+      padding: 0.75rem 1.5rem;
+    }
+
+    /* Optional: Adjust media query to make the dropdown responsive */
+    @media (max-width: 768px) {
+      .custom-index-dropdown {
+        width: 100%;
+        /* Makes the dropdown menu full-width on smaller screens */
+        padding: 1rem;
+      }
+    }
+
+    .loader {
+      border: 2px solid #f3f3f3;
+      /* Light grey */
+      border-top: 2px solid #3498db;
+      /* Blue */
+      border-radius: 50%;
+      width: 10px;
+      height: 10px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      /* Ensure it's inline with text */
+      margin-left: 5px;
+      /* Space between text and loader */
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    #indicator-store {
+    display: none;
+  }
+  </style>
+</head>
+
+<body>
+  <div id="lockscreen" style="display:none;">
+    <div class="lockscreen-content">
+      <div class="flex justify-center mb-4">
+        <img alt="Profile picture of Aaron Chavez" class="rounded-full w-24 h-24 border-4 border-blue-500" src="https://preview.themeon.net/nifty/assets/img/profile-photos/1.png" />
+      </div>
+      <div class="text-center mb-6">
+        <h2 id="lockName" class="text-2xl font-semibold text-gray-800">Aaron Chavez</h2>
+        <p id="lockType" class="text-gray-500">Administrator</p>
+      </div>
+      <form>
+        <div class="mb-4">
+          <input class="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Password" type="password" />
+        </div>
+        <div class="mb-4">
+          <button class="w-full bg-blue-500 text-white p-3 rounded hover:bg-blue-600 transition duration-200" type="button" onclick="unlock(event)">Unlock</button>
+        </div>
+        <div class="text-center mb-4">
+          <a class="text-blue-500 hover:underline" href="#">Sign in using different account</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- start: Sidebar -->
+  <div class="sidebar position-fixed top-0 bottom-0 bg-white border-end">
+    <div class="d-flex align-items-center p-3">
+      <a href="#" class="sidebar-logo text-uppercase fw-bold text-decoration-none text-indigo fs-4">KHO</a>
+      <i class="sidebar-toggle ri-arrow-left-circle-line ms-auto fs-5 d-none d-md-block"></i>
+    </div>
+    <ul class="sidebar-menu p-3 m-0 mb-0">
+      <li class="sidebar-menu-item active">
+        <a href="#" class="sidebar-menu-item active" onclick="loadDashboardPage(); return false;">
+          <i class="ri-dashboard-line sidebar-menu-item-icon"></i> Dashboard </a>
+      </li>
+      <li class="sidebar-menu-divider mt-3 mb-1 text-uppercase">Navigation</li>
+      <li class="sidebar-menu-item has-dropdown">
+        <a href="#">
+          <i class="ri-pages-line sidebar-menu-item-icon"></i> Pages
+          <i class="ri-arrow-down-s-line sidebar-menu-item-accordion ms-auto"></i>
+        </a>
+        <ul class="sidebar-dropdown-menu" style="list-style-type: none;">
+          <li class="sidebar-dropdown-menu-item">
+            <a href="#">
+              <i class="ri-arrow-drop-right-fill"></i> User Profile </a>
+          </li>
+          <li class="sidebar-dropdown-menu-item has-dropdown">
+            <a href=> Status <i class="ri-arrow-down-s-line sidebar-menu-item-accordion ms-auto"></i>
+            </a>
+            <ul class="sidebar-dropdown-menu">
+              <li class="sidebar-dropdown-menu-item">
+                <a href="#" class="sidebar-dropdown-menu-item">
+                  Pending
+                </a>
+              </li>
+              <li class="sidebar-dropdown-menu-item">
+                <a href="#" class="sidebar-dropdown-menu-item">
+                  Received
+                </a>
+              </li>
+              <li class="sidebar-dropdown-menu-item">
+                <a href="#" class="sidebar-dropdown-menu-item">
+                  Not Received
+                </a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+      <li class="sidebar-menu-item has-dropdown">
+        <a href="#">
+          <i class="ri-user-line sidebar-menu-item-icon"></i> Authentication
+          <i class="ri-arrow-down-s-line sidebar-menu-item-accordion ms-auto"></i>
+        </a>
+        <ul class="sidebar-dropdown-menu">
+          <li class="sidebar-dropdown-menu-item">
+            <a href="#"> Login </a>
+          </li>
+          <li class="sidebar-dropdown-menu-item">
+            <a href="#"> Registration </a>
+          </li>
+          <li class="sidebar-dropdown-menu-item">
+            <a href="#"> Reset Password </a>
+          </li>
+          <li class="sidebar-dropdown-menu-item">
+            <a href="#"> Change Password </a>
+          </li>
+          <li class="sidebar-dropdown-menu-item">
+            <a href="#"> Confirm Password </a>
+          </li>
+          <li class="sidebar-dropdown-menu-item">
+            <a href="#"> Deactivate Account </a>
+          </li>
+        </ul>
+      </li>
+      <li class="sidebar-menu-item has-dropdown">
+        <a href="#">
+          <i class="ri-window-line sidebar-menu-item-icon"></i> Widgets
+          <i class="ri-arrow-down-s-line sidebar-menu-item-accordion ms-auto"></i>
+        </a>
+        <ul class="sidebar-dropdown-menu">
+          <li class="sidebar-dropdown-menu-item">
+            <a href="#"> Charts </a>
+          </li>
+          <li class="sidebar-dropdown-menu-item">
+            <a href="#"> Tables </a>
+          </li>
+        </ul>
+      </li>
+      <li class="sidebar-menu-divider mt-3 mb-1 text-uppercase">Apps</li>
+      <ul class="sidebar-dropdown-menu">
+        <li class="sidebar-dropdown-menu-item">
+          <a href="#"> Shop </a>
+        </li>
+        <li class="sidebar-dropdown-menu-item">
+          <a href="#"> Checkout </a>
+        </li>
+        <li class="sidebar-dropdown-menu-item">
+          <a href="#"> Details </a>
+        </li>
+        <li class="sidebar-dropdown-menu-item">
+          <a href="#"> Wishlist </a>
+        </li>
+      </ul>
+      </li>
+      <li class="sidebar-menu-item transmittal-menu-item">
+        <a href="#" class="sidebar-menu-item" onclick="loadPage('transmittal'); return false;">
+          <i class="ri-mail-line sidebar-menu-item-icon"></i> Transmittal
+        </a>
+      </li>
+      <li class="sidebar-menu-item">
+        <a href="#" class="sidebar-menu-item" onclick="loadPage('Calendar'); return false;">
+          <i class="ri-calendar-check-fill sidebar-menu-item-icon"></i> Calendar </a>
+      </li>
+      <li class="sidebar-menu-item">
+        <a href="#">
+          <i class="ri-message-3-line sidebar-menu-item-icon"></i> Contact Admin </a>
+      </li>
+    </ul>
+  </div>
+  <div class="sidebar-overlay"></div>
+  <!-- end: Sidebar -->
+  <!-- start: Main -->
+  <main class="bg-light">
+    <div class="p-2">
+      <!-- start: Navbar -->
+      <nav class="px-3 py-2 bg-white rounded shadow-sm">
+        <i class="ri-menu-line sidebar-toggle me-3 d-block d-md-none"></i>
+        <h5 id="page-indicator" class="fw-bold mb-0 me-auto">Dashboard</h5>
+        <div class="dropdown">
+          <div class="d-flex align-items-center cursor-pointer dropdown-toggle" data-bs-toggle="dropdown"
+            aria-expanded="false">
+            <span class="me-2 d-none d-sm-block"></span>
+            <img class="navbar-profile-image" src="https://images.unsplash.com/flagged/photo-1570612861542-284f4c12e75f?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxzZWFyY2h8M3x8cGVyc29ufGVufDB8fDB8fA%3D%3D&auto=format&fit=crop&w=500&q=60" alt="Image">
+          </div>
+          <div class="dropdown-menu dropdown-menu-end custom-index-dropdown">
+            <!-- User dropdown header -->
+            <div class="d-flex align-items-center border-bottom pb-2 mb-2">
+              <div class="flex-shrink-0">
+                <img class="img-sm rounded-circle" src="https://preview.themeon.net/nifty/assets/img/profile-photos/1.png" alt="Profile Picture" loading="lazy">
+              </div>
+              <div class="flex-grow-1 ms-3">
+                <h5 id="indicator-name" class="mb-0">Aaron Chavez</h5>
+                <span id="indicator-address" class="text-muted fst-italic">aaron_chavez@example.com</span>
+                <span id="indicator-store" class="text-muted fst-italic">Store Name</span>
+                <!-- Added span with id="indicator-store" -->
+              </div>
+            </div>
+            <div class="row gx-3">
+              <div class="col-md-7">
+                <!-- Simple widget and reports -->
+                <div class="list-group list-group-borderless mb-3">
+                  <div class="list-group-item text-center border-bottom mb-3">
+                    <p id="navNew" class="h2 text-primary fw-semibold">0</p>
+                    <p class="h6 mb-0">
+                      <i class="demo-pli-basket-coins fs-4 me-2"></i> New Delivery
+                    </p>
+                  </div>
+                  <div class="list-group-item py-1 d-flex justify-content-between align-items-center"> Monthly Delivery
+                    <small id="navMonthly" class="fw-bold">0</small>
+                  </div>
+                  <div class="list-group-item py-1 d-flex justify-content-between align-items-center"> Late
+                    <small id="navLate" class="fw-bold text-danger"> 0</small>
+                  </div>
+                  <div class="list-group-item py-1 d-flex justify-content-between align-items-center"> Total Pending
+                    <span id="navPending" class="fw-bold text-body-emphasis">0</span>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-5">
+                <!-- User menu link -->
+                <div class="list-group list-group-borderless h-100">
+                  <a href="#" class="list-group-item list-group-item-action">
+                    <i class="ri-user-6-line"></i> Profile </a>
+                  <a href="#" class="list-group-item list-group-item-action">
+                    <i class="ri-settings-4-line"></i> Settings </a>
+                  <a href="#" class="list-group-item list-group-item-action mt-auto"
+                    onclick="showLockScreen(); return false;">
+                    <i class="ri-lock-2-line"></i> Lock screen </a>
+                  <a href="#" class="list-group-item list-group-item-action" onclick="logout(); return false;">
+                    <i class="ri-logout-circle-line"></i> Logout </a>
+                </div>
+              </div>
+            </div>
+          </div>
+      </nav>
+      <!-- end: Navbar -->
+      <!-- start: Content -->
+      <div id="content-page" class="py-2">
+
+  </main>
+  <!-- end: Main -->
+</body>
+
+</html>
