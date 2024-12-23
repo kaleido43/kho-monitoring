@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Store Transmittal</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
+  </head>
+
+<style>
+:root {
+  /* Enhanced Color Palette */
+  --color-brand: #6366f1;
+  --color-brand-light: #818cf8;
+  --color-brand-dark: #4338ca;
+  /* Refined Elevation and Depth */
+  --shadow-subtle: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-medium: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  /* Enhanced Animations */
+  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Modern Glassmorphic Design */
+body {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+  font-family: 'Inter', -apple-system, sans-serif;
+  line-height: 1.6;
+}
+
+/* Enhanced Container with Glassmorphic Effect */
+.details {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(15px);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-medium);
+  transition: var(--transition-smooth);
+}
+
+/* Improved Table Design */
+#storeTransmittalTable {
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+/* Hide Default DataTables Search */
+#storeTransmittalTable_filter {
+  display: none !important;
+}
+
+#storeTransmittalTable thead {
+  background: linear-gradient(to right, var(--color-brand), var(--color-brand-light));
+  color: white;
+}
+
+/* Hover and Interactive States */
+#storeTransmittalTable tbody tr {
+  transition: var(--transition-smooth);
+}
+
+#storeTransmittalTable tbody tr:hover {
+  background-color: rgba(99, 102, 241, 0.05);
+  transform: scale(1.01);
+  box-shadow: var(--shadow-subtle);
+}
+
+/* Enhanced Buttons with Micro-interactions */
+.btn {
+  position: relative;
+  overflow: hidden;
+  transition: var(--transition-smooth);
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: var(--transition-smooth);
+}
+
+.btn:hover::before {
+  left: 100%;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Status Badge Animations */
+.status-badge {
+  position: relative;
+  overflow: hidden;
+  transition: var(--transition-smooth);
+}
+
+.status-badge::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: currentColor;
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.status-badge:hover::after {
+  transform: scaleX(1);
+}
+
+/* Floating Action Button (FAB) Enhanced */
+.fab-button {
+  transition: var(--transition-smooth);
+  transform: scale(1);
+}
+
+.fab-button:hover {
+  transform: scale(1.1) rotate(45deg);
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Micro-interactions for FAB Actions */
+.fab-actions .fab-action-button {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: var(--transition-smooth);
+}
+
+.fab-main-container:hover .fab-actions .fab-action-button {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Advanced Search Bar Design */
+.search-wrapper {
+  position: relative;
+  width: 350px;
+  transition: var(--transition-smooth);
+}
+
+#searchInput {
+  /* Glassmorphic Search Input */
+  width: 100%;
+  padding: 0.75rem 1.25rem 0.75rem 3rem;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(15px);
+  border: 2px solid transparent;
+  border-radius: 2rem;
+  font-size: 0.95rem;
+  color: var(--color-gray-800);
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.05),
+    inset 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: var(--transition-smooth);
+}
+
+/* Search Icon */
+.search-icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-gray-500);
+  transition: var(--transition-smooth);
+}
+
+/* Focus States */
+#searchInput:focus {
+  border-color: var(--color-brand);
+  box-shadow:
+    0 0 0 3px rgba(99, 102, 241, 0.2),
+    0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+#searchInput:focus+.search-icon {
+  color: var(--color-brand);
+  transform: translateY(-50%) scale(1.2);
+}
+
+/* Clear Search Button */
+.search-clear {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-gray-500);
+  cursor: pointer;
+  opacity: 0;
+  transition: var(--transition-smooth);
+}
+
+#searchInput:not(:placeholder-shown)+.search-icon+.search-clear {
+  opacity: 1;
+}
+
+.search-clear:hover {
+  color: var(--color-error);
+}
+
+/* Responsive Animations */
+@media (max-width: 768px) {
+  .details {
+    backdrop-filter: blur(10px);
+  }
+}
+
+@media (max-width: 768px) {
+  .search-wrapper {
+    width: 100%;
+  }
+}
+
+/* Subtle Loading and Interaction Animations */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.loading {
+  animation: pulse 1.5s infinite;
+}
+
+/* Enhanced Scroll Bar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-brand);
+  border-radius: 10px;
+}
+
+.bulk-edit-mode {
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+.bulk-selected {
+    background-color: rgba(33, 150, 243, 0.2) !important;
+    outline: 2px solid #2196F3;
+}
+
+.bulk-selected:hover {
+    background-color: rgba(33, 150, 243, 0.3) !important;
+}
+
+.filter-highlight {
+    background-color: rgba(0, 123, 255, 0.1) !important;
+  }
+
+/* Optional: Add to your existing CSS */
+.datatable-row-with-remarks {
+  background-color: theme('colors.yellow.50');
+}
+
+.datatable-row-with-remarks:hover {
+  background-color: theme('colors.yellow.100');
+}
+</style>
+
+  <body>
+   <div id="content-page" class="py-2">
+      <div class="details">
+         <div class="bg-white rounded shadow-md p-4">
+            <div class="flex justify-between items-center mb-4">
+               <!-- Bulk Edit Toggle Container (for Administrators) -->
+               <div id="bulkEditToggleContainer" class="hidden">
+                  <label class="inline-flex items-center cursor-pointer">
+                     <input type="checkbox" id="bulkEditSwitch" class="sr-only peer">
+                     <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                     <span class="ml-3 text-sm font-medium text-gray-900 dark:text-gray-300">Bulk Edit</span>
+                  </label>
+               </div>
+               <!-- Add Data Button (for Users) -->
+               <button id="openAddModalButton" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+               Add Data
+               </button>
+               <!-- Container for search bar and button group -->
+               <div class="flex items-center space-x-4">
+                  <!-- Custom Search Bar -->
+                  <div id="dataTablesFilter" class="relative flex items-center">
+                     <input type="search" id="searchInput" class="form-control pl-10 pr-4 py-2 rounded border-gray-300" placeholder="Search...">
+                     <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                  </div>
+                  <!-- Date Filter -->
+                  <div class="flex items-center space-x-2">
+                     <label for="dateFilterType" class="text-gray-700 font-medium mr-2">Filter:</label>
+                     <select id="dateFilterType" class="form-control rounded border-gray-300 mr-2">
+                        <option value="monthly">Monthly</option>
+                        <option value="today">Today</option>
+                        <option value="weekly">This Week</option>
+                        <option value="custom">Custom</option>
+                     </select>
+                     <!-- Month Filter -->
+                     <input type="month" id="monthFilter" class="form-control pl-3 pr-3 py-2 rounded border-gray-300" style="display:block;">
+                     <!-- Custom Date Range -->
+                     <div id="customDateRange" style="display:none;" class="flex space-x-2">
+                        <input type="date" id="startDate" class="form-control rounded border-gray-300">
+                        <input type="date" id="endDate" class="form-control rounded border-gray-300">
+                     </div>
+                     <button id="filterByDate" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded ml-2">
+                     Filter
+                     </button>
+                  </div>
+                  <!-- Print, Download, and Bulk Edit Switch -->
+                  <div class="flex items-center space-x-2">
+                     <!-- Print Button -->
+                     <button id="printButton" class="btn btn-icon btn-outline-dark" aria-label="Print">
+                     <i class="fas fa-print fs-5"></i>
+                     </button>
+                     <!-- Download Button -->
+                     <button id="downloadButton" class="btn btn-icon btn-outline-dark" aria-label="Download">
+                     <i class="fas fa-download fs-5"></i>
+                     </button>
+                     <!-- Options Button -->
+                     <div id="transmittalButtonGroup" class="btn-group">
+                        <button class="btn btn-icons btn-outline-dark dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="true">
+                        <i class="fas fa-cogs fs-5"></i> Status
+                        <span class="visually-hidden">Toggle Dropdown</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                           <li><a class="dropdown-item" href="#">Pending</a></li>
+                           <li><a class="dropdown-item" href="#">Received</a></li>
+                           <li><a class="dropdown-item" href="#">Not Received</a></li>
+                           <li>
+                              <hr class="dropdown-divider">
+                           </li>
+                           <li><a class="dropdown-item" href="#">Refresh</a></li>
+                        </ul>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            <!-- Data Table -->
+            <table id="storeTransmittalTable" class="table display responsive nowrap" style="width:100%">
+               <thead>
+                  <tr>
+                     <th class="px-4 py-2">#</th>
+                     <th class="px-4 py-2">ID</th>
+                     <th class="px-4 py-2">DR Date</th>
+                     <th class="px-4 py-2">DR Number</th>
+                     <th class="px-4 py-2">Vendor</th>
+                     <th class="px-4 py-2">Type</th>
+                     <th class="px-4 py-2">Amount</th>
+                     <th class="px-4 py-2">Received</th>
+                     <th class="px-4 py-2">Transmitted</th>
+                     <th class="px-4 py-2">Received</th>
+                     <th class="px-4 py-2">Late</th>
+                     <th class="px-4 py-2">Remarks</th>
+                     <th class="px-4 py-2">Actions</th>
+                  </tr>
+               </thead>
+               <tbody>
+                  <!-- Data will be populated here -->
+               </tbody>
+            </table>
+         </div>
+      </div>
+      <!-- FAB Actions Container (Initially Hidden) -->
+      <div id="fabActionsContainer" class="hidden ml-4 flex space-x-2 items-center">
+         <div class="flex items-center space-x-2">
+            <button id="bulkReceivedButton" class="btn btn-success btn-sm flex items-center">
+            <i class="fas fa-check mr-2"></i>Received
+            </button>
+            <button id="bulkNotReceivedButton" class="btn btn-warning btn-sm flex items-center">
+            <i class="fas fa-times mr-2"></i>Not Received
+            </button>
+            <button id="bulkDeleteButton" class="btn btn-danger btn-sm flex items-center">
+            <i class="fas fa-trash-alt mr-2"></i>Delete
+            </button>
+            <button id="cancelBulkEdit" class="btn btn-secondary btn-sm flex items-center">
+            <i class="fas fa-times-circle mr-2"></i>Cancel
+            </button>
+         </div>
+      </div>
+   </div>
+   <!-- ================ View Modal ================= -->
+   <div class="modal fade" id="viewDataModal" tabindex="-1" aria-labelledby="viewDataModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+         <div class="modal-content">
+            <div class="modal-header bg-success text-light">
+               <h5 class="modal-title" id="viewDataModalLabel">View Data</h5>
+            </div>
+            <div class="modal-body">
+               <form id="viewDataForm">
+                  <input type="hidden" id="viewId" name="viewId">
+                  <div class="row">
+                     <div class="col-md-6 mb-3"></div>
+                     <div class="col-md-6 mb-3">
+                        <label for="viewDate">Date</label>
+                        <input type="text" id="viewDate" name="date" class="form-control" readonly>
+                     </div>
+                     <br></br>
+                     <div class="col-md-12 mb-3">
+                        <label for="viewDRNumber">DR Number</label>
+                        <input type="text" id="viewDRNumber" name="drnumber" class="form-control" readonly>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label for="viewVendor">Vendor</label>
+                        <input type="text" id="viewVendor" name="vendor" class="form-control" readonly>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label for="viewType">Type</label>
+                        <input type="text" id="viewType" name="type" class="form-control" readonly>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label for="viewAmount">Amount</label>
+                        <input type="text" id="viewAmount" name="amount" class="form-control" readonly>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label for="viewStatus">Status</label>
+                        <input type="text" id="viewStatus" name="status" class="form-control" readonly>
+                     </div>
+                     <div class="col-md-12 mb-3">
+                        <label for="viewTransmitted">Transmitted</label>
+                        <input type="text" id="viewTransmitted" name="transmitted" class="form-control" readonly>
+                     </div>
+                     <div class="col-md-12 mb-3" style="display: none;">
+                        <label for="viewReceived">Received</label>
+                        <input type="text" id="viewReceived" name="received" class="form-control" readonly >
+                     </div>
+                     <div class="col-md-12 mb-3">
+                        <label for="viewLate">Late</label>
+                        <input type="text" id="viewLate" name="late" class="form-control" readonly>
+                     </div>
+                     <div class="col-md-12 mb-3">
+                        <label for="viewRemarks">Remarks</label>
+                        <textarea id="viewRemarks" name="viewRemarks" class="form-control" rows="3" readonly></textarea>
+                     </div>
+                  </div>
+               </form>
+            </div>
+         </div>
+      </div>
+   </div>
+   <!-- ================ Add Modal ================= -->
+   <div class="modal fade" id="addDataModal" tabindex="-1" aria-labelledby="addDataModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+         <div class="modal-content">
+            <div class="modal-header bg-indigo text-light">
+               <h5 class="modal-title" id="addDataModalLabel">Add Data</h5>
+               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+               <form id="addDataForm">
+                  <div class="row">
+                     <div class="col-md-6 mb-3"></div>
+                     <div class="col-md-6 mb-3">
+                        <label for="date">Date</label>
+                        <input type="date" id="date" name="date" class="form-control" required>
+                     </div>
+                     <br></br>
+                     <div class="col-md-12 mb-3">
+                        <label for="drnumber">DR Number</label>
+                        <input type="text" id="drnumber" name="drnumber" class="form-control" required>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label for="vendor">Vendor</label>
+                        <select id="vendor" name="vendor" class="form-control" required>
+                           <option value="" selected disabled>Select Vendor</option>
+                        </select>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label for="type">Type</label>
+                        <input type="text" id="type" name="type" class="form-control" readonly required>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label for="amount">Amount</label>
+                        <input type="text" id="amount" name="amount" class="form-control" required>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label for="transmitted">Transmitted</label>
+                        <input type="date" id="transmitted" name="transmitted" class="form-control" readonly>
+                     </div>
+                     <div class="col-md-12 mb-3" style="display: none;">
+                        <label for="status">Status</label>
+                        <input type="text" id="status" name="status" value="PENDING" class="form-control">
+                     </div>
+                     <div class="col-md-12 mb-3" style="display: none;">
+                        <label for="received">Received</label>
+                        <input type="date" id="received" name="received" class="form-control">
+                     </div>
+                     <div class="col-md-12 mb-3" style="display: none;">
+                        <label for="late">Late</label>
+                        <input type="text" id="late" name="late" class="form-control">
+                     </div>
+                     <div class="col-md-12 mb-3">
+                        <label for="remarks">Remarks</label>
+                        <textarea id="remarks" name="remarks" class="form-control" rows="3"></textarea>
+                     </div>
+                     <div class="col-md-12 mb-3" style="display: none;">
+                        <label for="store">Store</label>
+                        <input type="text" id="store" name="store" class="form-control" required>
+                     </div>
+                  </div>
+                  <div class="d-flex justify-content-end">
+                     <button type="button" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded" data-bs-dismiss="modal">Cancel</button>
+                     <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Submit</button>
+                  </div>
+               </form>
+            </div>
+         </div>
+      </div>
+   </div>
+   <!-- ================ Edit Modal ================= -->
+   <div class="modal fade" id="editDataModal" tabindex="-1" aria-labelledby="editDataModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+         <div class="modal-content">
+            <div class="modal-header">
+               <h5 class="modal-title" id="editDataModalLabel">Edit Data</h5>
+               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+               <form id="editDataForm" enctype="multipart/form-data">
+                  <input type="text" id="editId" name="editId" style="display:none;">
+                  <div class="row">
+                     <div class="col-md-6 mb-3">
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label>Date</label>
+                        <input type="date" id="editDate" name="editDate" class="form-control" required>
+                     </div>
+                     <div class="col-md-12 mb-3">
+                        <label>DR Number</label>
+                        <input type="text" id="editDRnumber" name="editDRnumber" class="form-control" required>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label>Vendor</label>
+                        <select id="editVendor" name="editVendor" class="form-control" required>
+                           <option value=""></option>
+                        </select>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label>Type</label>
+                        <input type="text" id="editType" name="editType" class="form-control" readonly required>
+                     </div>
+                     <div class="col-md-6 mb-3">
+                        <label>Amount</label>
+                        <input type="text" id="editAmount" name="editAmount" class="form-control" required>
+                     </div>
+                     <div class="col-md-6 mb-3" style="display:none;">
+                        <label>Status</label>
+                        <select type="text" id="editStatus" name="editStatus" class="form-control" readonly required>
+                           <option value="PENDING">PENDING</option>
+                           <option value="RECEIVED">RECEIVED</option>
+                           <option value="MISSING">MISSING</option>
+                        </select>
+                     </div>
+                     <div class="col-md-12 mb-3" style="display:none;">
+                        <label>Transmitted</label>
+                        <input type="date" id="editTransmitted" name="editTransmitted" class="form-control">
+                     </div>
+                     <div class="col-md-12 mb-3" style="display:none;">
+                        <label>Received</label>
+                        <input type="date" id="editReceived" name="editReceived" class="form-control" readonly>
+                     </div>
+                     <div class="col-md-12 mb-3" style="display:none;">
+                        <label>Late</label>
+                        <input type="text" id="editLate" name="editLate" class="form-control" readonly>
+                     </div>
+                     <div class="col-md-12 mb-3" id="descriptionContainer">
+                        <label>Remarks</label>
+                        <textarea type="text" id="editRemarks" name="editRemarks" class="form-control"></textarea>
+                     </div>
+                     <div class="col-md-12 mb-3" style="display:none;">
+                        <label for="store">Store</label>
+                        <input type="text" id="editStore" name="editStore" class="form-control" readonly required>
+                     </div>
+                  </div>
+                  <button type="button" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded" data-bs-dismiss="modal">Cancel</button>
+                  <button type="submit" id="editUpdateBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Update</button>
+                  <div id="loadingIndicator" style="display:none;">
+                     <i class="fas fa-spinner fa-spin"></i> Loading...
+                  </div>
+               </form>
+            </div>
+         </div>
+      </div>
+   </div>
+</body>
+</html>
