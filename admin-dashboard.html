@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Store Dashboard for managing multiple store locations">
+    <title>Store Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    
+<style>
+    /* Variables for Theming */
+:root {
+    /* Primary Color Palette */
+    --primary-50: #eef2ff;
+    --primary-100: #e0e7ff;
+    --primary-200: #c7d2fe;
+    --primary-300: #a5b4fc;
+    --primary-400: #818cf8;
+    --primary-500: #6366f1;
+    --primary-600: #4f46e5;
+    --primary-700: #4338ca;
+    
+    /* Neutral Color Scale */
+    --neutral-50: #f8fafc;
+    --neutral-100: #f1f5f9;
+    --neutral-200: #e2e8f0;
+    --neutral-300: #cbd5e1;
+    --neutral-400: #94a3b8;
+    --neutral-500: #64748b;
+    --neutral-600: #475569;
+    --neutral-700: #334155;
+    
+    /* Semantic Colors */
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #0ea5e9;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+    /* Transition Timings */
+    --transition-fast: 0.2s ease;
+    --transition-medium: 0.3s ease;
+
+    /* Accessibility Colors */
+    --focus-outline: rgba(99, 102, 241, 0.5);
+}
+
+/* Global Resets and Base Styles */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: linear-gradient(135deg, var(--neutral-50) 0%, var(--neutral-100) 100%);
+    min-height: 100vh;
+    color: var(--neutral-700);
+    line-height: 1.6;
+    padding: 1rem; /* Added padding for better spacing */
+}
+
+/* Filter Bar Styles */
+.filter-bar {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--neutral-200);
+    border-radius: 16px;
+    padding: 1.5rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-lg);
+}
+
+.filter-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.filter-group label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--neutral-600);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.filter-group select {
+    appearance: none;
+    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236366f1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 1rem center;
+    background-size: 1rem;
+    border: 2px solid var(--neutral-200);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    width: 100%;
+    color: var(--neutral-700);
+    font-size : 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.filter-group select:hover {
+    border-color: var(--primary-400);
+}
+
+.filter-group select:focus {
+    outline: none;
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 4px var(--focus-outline);
+}
+
+/* Button Styles */
+#filterButton {
+    background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+    box-shadow: var(--shadow-md);
+}
+
+#filterButton:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
+}
+
+/* Cards Grid */
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    padding: 0.75rem;
+    justify-content: center;
+}
+
+/* Specific handling for fewer cards */
+.cards.single-card {
+    grid-template-columns: 1fr;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.cards.two-cards {
+    grid-template-columns: repeat(2, minmax(250px, 1fr));
+    max-width: 800px;
+    gap: 2rem;
+    margin: 0 auto;
+    justify-content: center;
+}
+
+.cards.three-cards {
+    grid-template-columns: repeat(3, minmax(250px, 1fr));
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Enhanced card sizing for fewer cards */
+.cards.single-card .card {
+    max-width: 500px;
+    width: 100%;
+    justify-self: center;
+}
+
+.cards.two-cards .card {
+    max-width: 350px;
+    width: 100%;
+    justify-self: center;
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    max-width: 300px;
+    width: 100%;
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    transition: transform var(--transition-medium), box-shadow var(--transition-medium);
+}
+
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    text-align: center;
+    background: var(--neutral-50);
+    border-bottom: 1px solid var(--neutral-200);
+    position: relative;
+}
+
+.card-header-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.card-actions {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.admin-dropdown-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background: white;
+    border: 1px solid var(--neutral-200);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    z-index: 10;
+    list-style-type: none;
+    padding: 0.5rem;
+    min-width: 150px;
+}
+
+.more {
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.more:hover {
+    background: var(--neutral-100);
+}
+
+.more i {
+    font-size: 1rem;
+    color: var(--neutral-500);
+}
+
+.admin-dropdown-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    text-decoration: none;
+    color: var(--neutral-700);
+    transition: background-color 0.2s ease;
+}
+
+.admin-dropdown-menu .dropdown-item:hover {
+    background-color: var(--neutral-100);
+    border-radius: 4px;
+}
+
+.store-logo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 0.5rem;
+    border: 2px solid white;
+    box-shadow: var(--shadow-sm);
+}
+
+.card h3 {
+    font-size: 1.25rem;
+    color: var(--neutral-700);
+    margin: 0 0 0.25rem;
+    font-weight: 700;
+}
+
+/* Small Cards Section */
+.metric-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.small-cards {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: white;
+}
+
+.small-card {
+    background: var(--neutral-50);
+    border radius: 8px;
+    padding: 0.5rem;
+    text-align: center;
+    border: 1px solid var(--neutral-200);
+    transition: all 0.2s ease;
+}
+
+.small-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+    background: var(--neutral-100);
+}
+
+.metric-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.metric-icon {
+    font-size: 1.2rem;
+    margin-bottom: 0.25rem;
+}
+
+.metric-value {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--neutral-700);
+}
+
+.metric-label {
+    font-size: 0.7rem;
+    color: var(--neutral-500);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .small-cards {
+        flex-wrap: wrap;
+    }
+    
+    .metric-container {
+        flex-basis: calc(50% - 0.5rem); /* Adjusted for better spacing */
+        margin-bottom: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .small-cards {
+        flex-direction: column; /* Stack small cards on smaller screens */
+    }
+
+    .metric-container {
+        flex-basis: 100%; /* Full width for small screens */
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .cards.two-cards {
+        grid-template-columns: 1fr;
+        max-width: 500px;
+    }
+
+    .cards.three-cards {
+        grid-template-columns: repeat(2, minmax(250px, 1fr));
+        max-width: 900px;
+    }
+}
+
+@media (max-width: 768px) {
+    .cards {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .cards.single-card,
+    .cards.two-cards,
+    .cards.three-cards {
+        grid-template-columns: 1fr;
+        max-width: 100%;
+    }
+
+    .cards.single-card .card,
+    .cards.two-cards .card,
+    .cards.three-cards .card {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .cards {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+</head>
+<body>
+    <div class="content-page">
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label for="storeSelection">Store Selection</label>
+                <select id="storeSelection" aria-label="Select store">
+                    <option value="All">All Stores</option>
+                    <option value="Jollibee">Jollibee</option>
+                    <option value="Red Ribbon">Red Ribbon</option>
+                    <option value="Greenwich">Greenwich</option>
+                    <option value="Chowking">Chowking</option>
+                    <option value="Mang Inasal">Mang Inasal</option>
+                </select>
+            </div>
+            <button id="filterButton" aria-label="Apply filter">
+                <i class="fas fa-filter"></i> Apply Filter
+            </button>
+        </div>
+        
+        <main class="cards" id="cards-container">
+            <!-- Cards will be dynamically inserted here -->
+        </main>
+    </div>
+</body>
+</html>
