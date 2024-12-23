@@ -1,160 +1,206 @@
 <script>
-// Modify loadDashboardPage to handle returning to admin dashboard
-function loadDashboardPage() {
-    console.log('Current user type:', userType);
+	// Modify loadDashboardPage to handle returning to admin dashboard
+	function loadDashboardPage() {
+		console.log('Current user type:', userType);
 
-    // Delegate to separate functions based on user type
-    if (userType === 'Administrator') {
-        // Check if we have a stored admin dashboard state
-        if (adminDashboardPageCache && adminDashboardDataCache) {
-            // Restore admin dashboard state
-            dashboardPageCache = adminDashboardPageCache;
-            dashboardDataCache = adminDashboardDataCache;
+		// Delegate to separate functions based on user type
+		if (userType === 'Administrator') {
+			// Check if we have a stored admin dashboard state
+			if (adminDashboardPageCache && adminDashboardDataCache) {
+				// Restore admin dashboard state
+				dashboardPageCache = adminDashboardPageCache;
+				dashboardDataCache = adminDashboardDataCache;
 
-            // Clear the stored admin dashboard state
-            adminDashboardPageCache = null;
-            adminDashboardDataCache = null;
+				// Clear the stored admin dashboard state
+				adminDashboardPageCache = null;
+				adminDashboardDataCache = null;
 
-            // Load admin dashboard
-            loadAdminDashboardPage();
-        } else {
-            // Standard admin dashboard load
-            loadAdminDashboardPage();
-        }
-    } else {
-        loadUserDashboardPage();
-    }
+				// Load admin dashboard
+				loadAdminDashboardPage();
+			} else {
+				// Standard admin dashboard load
+				loadAdminDashboardPage();
+			}
+		} else {
+			loadUserDashboardPage();
+		}
+	}
+
+function loadUserDashboardPage() {
+	console.log('Loading dashboard - Store:', storeName);
+	console.log('Store Specific View:', isStoreSpecificView);
+
+	// Show loading dialog immediately
+	showLoadingDialog('Loading Dashboard...');
+
+	// Load the dashboard page
+	loadPage('dashboard', function() {
+		const contentPage = document.getElementById('content-page');
+		if (contentPage) {
+			// Update dashboard header based on view type
+			updateDashboardHeader();
+
+			dashboardPageCache = contentPage.innerHTML;
+			lastDashboardFetchedTime = new Date();
+
+			// Always fetch fresh data for store-specific view
+			if (isStoreSpecificView) {
+				fetchDashboardData(false);
+			} else {
+				// Existing caching logic for standard view
+				const cacheExpiration = 5 * 60 * 1000; // 5 minutes
+				const currentTime = new Date();
+
+				if (dashboardDataCache &&
+					(currentTime - lastDashboardFetchedTime < cacheExpiration)) {
+					console.log('Using cached dashboard data');
+
+					// Populate dashboard with cached data immediately
+					setTimeout(() => {
+						populateDashboard(false);
+						processDashboardData(dashboardDataCache);
+						hideLoadingDialog();
+					}, 100);
+
+					// Fetch fresh data in the background
+					fetchDashboardData(true);
+				} else {
+					// No valid cached data - fetch fresh data
+					console.log('Fetching fresh dashboard data');
+					fetchDashboardData();
+				}
+			}
+		} else {
+			console.error("Element with ID 'content-page' not found.");
+			hideLoadingDialog();
+		}
+	});
 }
 
-function loadUserDashboardPage(storeId = null, isStoreSpecificView = false) {
-    console.log('Loading standard dashboard for user type:', userType);
+// Add the header update function
+function updateDashboardHeader() {
+	const headerElement = document.querySelector('.table-header h2');
 
-    // Show loading dialog immediately
-    showLoadingDialog('Loading Dashboard...');
+	if (headerElement) {
+		if (isStoreSpecificView) {
+			const currentDate = new Date();
+			const monthNames = [
+				'January', 'February', 'March', 'April', 'May', 'June',
+				'July', 'August', 'September', 'October', 'November', 'December'
+			];
 
-    // Load the dashboard page
-    loadPage('dashboard', function() {
-        const contentPage = document.getElementById('content-page');
-        if (contentPage) {
-            dashboardPageCache = contentPage.innerHTML;
-            lastDashboardFetchedTime = new Date();
+			const currentMonth = monthNames[currentDate.getMonth()];
+			const currentYear = currentDate.getFullYear();
 
-            // Determine data loading strategy
-            const cacheExpiration = 5 * 60 * 1000; // 5 minutes
-            const currentTime = new Date();
-
-            if (isStoreSpecificView) {
-                // Always fetch fresh data for store-specific view
-                fetchDashboardData(storeId);
-            } else {
-                // Check if cached data exists and is still valid
-                if (dashboardDataCache && 
-                    (currentTime - lastDashboardFetchedTime < cacheExpiration)) {
-                    console.log('Using cached dashboard data');
-                    
-                    // Populate dashboard with cached data immediately
-                    setTimeout(() => {
-                        populateDashboard();
-                        processDashboardData(dashboardDataCache);
-                        hideLoadingDialog();
-                    }, 100);
-
-                    // Fetch fresh data in the background
-                    fetchDashboardData(null, true);
-                } else {
-                    // No valid cached data - fetch fresh data
-                    console.log('Fetching fresh dashboard data');
-                    fetchDashboardData();
-                }
-            }
-        } else {
-            console.error("Element with ID 'content-page' not found.");
-            hideLoadingDialog();
-        }
-    });
+			// More descriptive and professional headers
+			headerElement.textContent = `PENDING DELIVERY RECEIPTS OVERVIEW`;
+			// Alternative options:
+			// - `Pending Delivery Receipts | ${currentMonth} ${currentYear}`
+			// - `Outstanding Delivery Receipts Tracking`
+			// - `Pending DR Management Dashboard`
+		} else {
+			headerElement.textContent = 'WEEKLY DELIVERY RECEIPTS';
+		}
+	}
 }
 
-// Modify fetchDashboardData to enhance caching
-function fetchDashboardData(storeId = null, isBackgroundRefresh = false) {
-    const targetStoreName = storeId || storeName;
+// Modify fetchDashboardData to include header update if needed
+function fetchDashboardData(isBackgroundRefresh = false) {
+	console.log('Fetching Dashboard Data:', {
+		storeName,
+		isBackgroundRefresh,
+		isStoreSpecificView
+	});
 
-    google.script.run
-        .withSuccessHandler(function(data) {
-            try {
-                const newDashboardData = JSON.parse(data);
-                
-                // Update cache only if data is different or no existing cache
-                if (!dashboardDataCache || !isEqual(dashboardDataCache, newDashboardData)) {
-                    dashboardDataCache = newDashboardData;
-                    lastDashboardFetchedTime = new Date();
+	// Ensure header is updated before data fetch
+	updateDashboardHeader();
 
-                    // Only repopulate and process if not a background refresh
-                    // or if there's no existing data
-                    if (!isBackgroundRefresh || !dashboardDataCache) {
-                        populateDashboard();
-                        processDashboardData(dashboardDataCache);
-                        
-                        // Show success toast
-                        showToast('success', 'Dashboard data updated successfully');
-                    }
-                } else {
-                    // Show toast if data is unchanged during background refresh
-                    if (isBackgroundRefresh) {
-                        showToast('info', 'No new dashboard updates');
-                    }
-                }
-            } catch (error) {
-                handleDashboardError(`Failed to process dashboard data: ${error.message}`, isBackgroundRefresh);
-            }
-            
-            // Only hide loading dialog if not a background refresh
-            if (!isBackgroundRefresh) {
-                hideLoadingDialog();
-            }
-        })
-        .withFailureHandler(error => {
-            handleDashboardError(`Failed to fetch dashboard data: ${error.message}`, isBackgroundRefresh);
-            
-            // If not background refresh, ensure loading dialog is closed
-            if (!isBackgroundRefresh) {
-                hideLoadingDialog();
-            }
-        })
-        .getDashboardData(targetStoreName);
+	google.script.run
+		.withSuccessHandler(function(data) {
+			try {
+				const newDashboardData = JSON.parse(data);
+
+				// Update cache only if data is different or no existing cache
+				if (!dashboardDataCache || !isEqual(dashboardDataCache, newDashboardData)) {
+					dashboardDataCache = newDashboardData;
+					lastDashboardFetchedTime = new Date();
+
+					// Only repopulate and process if not a background refresh
+					// or if there's no existing data
+					if (!isBackgroundRefresh || !dashboardDataCache) {
+						populateDashboard(isStoreSpecificView);
+						processDashboardData(dashboardDataCache);
+
+						// Contextual success toast
+						showToast('success',
+							isStoreSpecificView ?
+							`Dashboard data loaded for ${storeName}` :
+							'Dashboard data updated successfully'
+						);
+					}
+				} else {
+					// Show toast if data is unchanged during background refresh
+					if (isBackgroundRefresh) {
+						showToast('info', 'No new dashboard updates');
+					}
+				}
+			} catch (error) {
+				handleDashboardError(`Failed to process dashboard data: ${error.message}`, isBackgroundRefresh);
+			}
+
+			// Only hide loading dialog if not a background refresh
+			if (!isBackgroundRefresh) {
+				hideLoadingDialog();
+			}
+		})
+		.withFailureHandler(error => {
+			handleDashboardError(`Failed to fetch dashboard data: ${error.message}`, isBackgroundRefresh);
+
+			// If not background refresh, ensure loading dialog is closed
+			if (!isBackgroundRefresh) {
+				hideLoadingDialog();
+			}
+		})
+		.getDashboardData(storeName); // Always use storeName
+}
+
+// Optional: Add a method to toggle store-specific view with header update
+function toggleStoreSpecificView(storeNameParam) {
+	isStoreSpecificView = true;
+	storeName = storeNameParam;
+
+	// Update header and fetch data
+	updateDashboardHeader();
+	fetchDashboardData(false);
 }
 
 // Add a function to check cache validity
 function isDashboardCacheValid() {
-    if (!dashboardDataCache) return false;
+	if (!dashboardDataCache) return false;
 
-    const cacheExpiration = 5 * 60 * 1000; // 5 minutes
-    const currentTime = new Date();
+	const cacheExpiration = 5 * 60 * 1000; // 5 minutes
+	const currentTime = new Date();
 
-    return (currentTime - lastDashboardFetchedTime < cacheExpiration);
-}
-
-// Compare two objects for equality
-function isEqual(obj1, obj2) {
-  return JSON.stringify(obj1) === JSON.stringify(obj2);
+	return (currentTime - lastDashboardFetchedTime < cacheExpiration);
 }
 
 // Modify invalidateDashboardCache to be more comprehensive
 function invalidateDashboardCache() {
-    dashboardDataCache = null;
-    lastDashboardFetchedTime = null;
-    
-    // Optionally, you can add additional cleanup
-    if (window.barChartInstance) {
-        window.barChartInstance.destroy();
-    }
-    if (window.pieChartInstance) {
-        window.pieChartInstance.destroy();
-    }
+	dashboardDataCache = null;
+	lastDashboardFetchedTime = null;
+
+	// Optionally, you can add additional cleanup
+	if (window.barChartInstance) {
+		window.barChartInstance.destroy();
+	}
+	if (window.pieChartInstance) {
+		window.pieChartInstance.destroy();
+	}
 }
 
 // Modify showLoadingDialog to use a more consistent loading screen
 function showLoadingDialog(message) {
-    Swal.fire({
+    return Swal.fire({
         title: 'Loading',
         html: `<div class="flex flex-col items-center">
                 <div class="mb-4">${message}</div>
@@ -168,527 +214,711 @@ function showLoadingDialog(message) {
     });
 }
 
-// Enhanced error handling with toast notifications
-function handleDashboardError(errorMessage, isBackground = false) {
-    console.error('Dashboard Error:', errorMessage);
-
-    // If not a background refresh, show a more detailed error
-    if (!isBackground) {
-        Swal.fire({
-            icon: 'error',
-            title: 'Dashboard Error',
-            text: errorMessage,
-            confirmButtonText: 'OK',
-            confirmButtonColor: '#3085d6'
-        });
-    }
-
-    // Always show a toast notification
-    showToast('error', errorMessage);
-}
-
-// Hide loading dialog
-function hideLoadingDialog() {
-    Swal.close();
-}
-
 // Populate the dashboard UI with fetched data
 function populateDashboard() {
-  const dashboardData = dashboardDataCache || {};
+	const dashboardData = dashboardDataCache || {};
 
-  // Get the current month and year
-  const currentDate = new Date();
-  const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`; 
+	// Get the current month and year
+	const currentDate = new Date();
+	const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
 
-  // Safe extraction with default values and null checks
-  const extractCount = (countObj, key, defaultValue = 0) => {
-    try {
-      return (countObj && countObj[key]) || defaultValue;
-    } catch (error) {
-      console.warn(`Error extracting count for key: ${key}`, error);
-      return defaultValue;
-    }
-  };
+	// Safe extraction with default values and null checks
+	const extractCount = (countObj, key, defaultValue = 0) => {
+		try {
+			return (countObj && countObj[key]) || defaultValue;
+		} catch (error) {
+			console.warn(`Error extracting count for key: ${key}`, error);
+			return defaultValue;
+		}
+	};
 
-  // Safely extract counts with fallback mechanisms
-  const totalDRCount = extractCount(dashboardData.drCount, currentMonthKey);
-  const totalLateCount = extractCount(dashboardData.lateCount, currentMonthKey);
-  const totalPendingCount = extractCount(dashboardData, 'pendingCount');
-  const totalReceivedCount = extractCount(dashboardData, 'receivedCount');
-  const totalNotReceivedCount = extractCount(dashboardData, 'notReceivedCount');
-  const weeklyDRCount = extractCount(dashboardData, 'weeklyDRCount');
+	// Safely extract counts with fallback mechanisms
+	const totalDRCount = extractCount(dashboardData.drCount, currentMonthKey);
+	const totalLateCount = extractCount(dashboardData.lateCount, currentMonthKey);
+	const totalPendingCount = extractCount(dashboardData, 'pendingCount');
+	const totalReceivedCount = extractCount(dashboardData, 'receivedCount');
+	const totalNotReceivedCount = extractCount(dashboardData, 'notReceivedCount');
+	const weeklyDRCount = extractCount(dashboardData, 'weeklyDRCount');
 
-  // Populate the summary dashboard elements
-  const elements = [
-    { id: 'weeklyDRCount', value: weeklyDRCount },
-    { id: 'lateCount', value: totalLateCount },
-    { id: 'drCount', value: totalDRCount },
-    { id: 'pendingCount', value: totalPendingCount },
-    { id: 'receivedCount', value: totalReceivedCount },
-    { id: 'notReceivedCount', value: totalNotReceivedCount },
-    { id: 'navNew', value: weeklyDRCount },
-    { id: 'navMonthly', value: totalDRCount },
-    { id: 'navLate', value: totalLateCount },
-    { id: 'navPending', value: totalPendingCount }
-  ];
+	// Populate the summary dashboard elements
+	const elements = [{
+			id: 'weeklyDRCount',
+			value: weeklyDRCount
+		},
+		{
+			id: 'lateCount',
+			value: totalLateCount
+		},
+		{
+			id: 'drCount',
+			value: totalDRCount
+		},
+		{
+			id: 'pendingCount',
+			value: totalPendingCount
+		},
+		{
+			id: 'receivedCount',
+			value: totalReceivedCount
+		},
+		{
+			id: 'notReceivedCount',
+			value: totalNotReceivedCount
+		},
+		{
+			id: 'navNew',
+			value: weeklyDRCount
+		},
+		{
+			id: 'navMonthly',
+			value: totalDRCount
+		},
+		{
+			id: 'navLate',
+			value: totalLateCount
+		},
+		{
+			id: 'navPending',
+			value: totalPendingCount
+		}
+	];
 
-  // Update the UI elements with values
-  elements.forEach(el => {
-    const element = document.getElementById(el.id);
-    if (element) {
-      element.innerText = el.value;
-    } else {
-      console.warn(`Element with id ${el.id} not found`);
-    }
-  });
+	// Update the UI elements with values
+	elements.forEach(el => {
+		const element = document.getElementById(el.id);
+		if (element) {
+			element.innerText = el.value;
+		} else {
+			console.warn(`Element with id ${el.id} not found`);
+		}
+	});
 
-  // Populate weekly transmittal table
-  populateWeeklyTransmittalTable(
-    (dashboardData.weeklyTransmittalData || [])
-  );
+	// Conditionally populate transmittal table based on view type
+	if (isStoreSpecificView) {
+		populatePendingRecords(dashboardData);
+	} else {
+		populateWeeklyTransmittalTable(
+			(dashboardData.weeklyTransmittalData || [])
+		);
+	}
 }
 
 // Enhanced error-safe version of populateWeeklyTransmittalTable
 function populateWeeklyTransmittalTable(data = []) {
-  const tableBody = document.querySelector('.table-container tbody');
-  
-  // Validate table body exists
-  if (!tableBody) {
-    console.error('Table body not found');
-    return;
-  }
+	const tableBody = document.querySelector('.table-container tbody');
 
-  tableBody.innerHTML = '';
+	// Validate table body exists
+	if (!tableBody) {
+		console.error('Table body not found');
+		return;
+	}
 
-  const { start, end } = getCurrentWeekDates();
+	tableBody.innerHTML = '';
 
-  // Filter data for the current week (based on Transmitted Date)
-  const filteredData = data.filter(row => {
-    try {
-      const transmittedDate = new Date(row.Transmitted);
-      return transmittedDate >= start && transmittedDate <= end;
-    } catch (error) {
-      console.warn('Invalid date in transmittal data', row, error);
-      return false;
-    }
-  });
+	// Create table header
+	const tableHeader = document.querySelector('.table-container thead');
+	if (tableHeader) {
+		tableHeader.innerHTML = `
+      <tr>
+        <th>Date</th>
+        <th>DR Number</th>
+        <th>Vendor</th>
+        <th>Amount</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    `;
+	}
 
-  if (filteredData.length === 0) {
-    tableBody.innerHTML = '<tr><td colspan="5">No data available for this week.</td></tr>';
-    return;
-  }
+	// Filter for current week
+	const {
+		start,
+		end
+	} = getCurrentWeekDates();
+	const filteredData = data.filter(row => {
+		try {
+			const transmittedDate = new Date(row.Transmitted);
+			return transmittedDate >= start && transmittedDate <= end;
+		} catch (error) {
+			console.warn('Invalid date in transmittal data', row, error);
+			return false;
+		}
+	});
 
-  // Populate the table with the filtered data
-  filteredData.forEach(row => {
-    try {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
+	// Handle empty data scenarios
+	if (filteredData.length === 0) {
+		tableBody.innerHTML = `<tr><td colspan="6" class="text-center text-gray-500 p-4">No data available for this week.</td></tr>`;
+		return;
+	}
+
+	// Populate the table with the filtered data
+	filteredData.forEach((row, index) => {
+		try {
+			// Sanitize amount
+			const sanitizedAmount = typeof row.Amount === 'string' ?
+				parseFloat(row.Amount.replace(/,/g, '')) :
+				parseFloat(row.Amount);
+
+			// Format date
+			const formattedDate = formatDate(row.Transmitted);
+
+			const tr = document.createElement('tr');
+			tr.innerHTML = `
+        <td>${formattedDate}</td>
         <td>${row['DR Number'] || 'N/A'}</td>
         <td>${row.Vendor || 'Unknown'}</td>
-        <td>$${parseFloat(row.Amount || 0).toFixed(2)}</td>
-        <td><span class="bg-${getStatusColor(row.Status)}-200 text-${getStatusColor(row.Status)}-800 px-2 py-1 rounded">${row.Status || 'Unknown'}</span></td>
-        <td>${row.Remarks || ''}</td>`;
-      tableBody.appendChild(tr);
-    } catch (error) {
-      console.warn('Error processing transmittal row', row, error);
-    }
-  });
+        <td>$${isNaN(sanitizedAmount) ? 'N/A' : sanitizedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td>
+          <span class="bg-${getStatusColor(row.Status)}-200 text-${getStatusColor(row.Status)}-800 px-2 py-1 rounded">
+            ${row.Status || 'Unknown'}
+          </span>
+        </td>
+        <td>
+          <button class="action-btn text-blue-600 hover:text-blue-800" 
+                  data-index="${index}">
+            View Details
+          </button>
+        </td>`;
+
+			// Add click event for more details
+			tr.querySelector('.action-btn')?.addEventListener('click', (e) => {
+				const dataIndex = e.target.getAttribute('data-index');
+				showWeeklyTransmittalDetails(filteredData[dataIndex]);
+			});
+
+			tableBody.appendChild(tr);
+		} catch (error) {
+			console.warn('Error processing transmittal row', row, error);
+		}
+	});
 }
 
-// Helper function to get current week date range (Monday to Sunday)
-function getCurrentWeekDates() {
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-  const distanceToMonday = (dayOfWeek + 6) % 7;
+function showWeeklyTransmittalDetails(record) {
+	// More flexible detail extraction
+	const details = {
+		date: formatDate(record.Transmitted || 'N/A'),
+		drNumber: record['DR Number'] || record.DRNumber || record.drNumber || 'N/A',
+		vendor: record.Vendor || record.VendorName || record.vendorName || 'Unknown',
+		amount: parseFloat(record.Amount || record.amount || record.TotalAmount || 0)
+			.toLocaleString('en-US', {
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 2
+			}),
+		status: record.Status || record.status || 'Unknown',
+		type: record.Type || record.type || 'N/A',
+		received: formatDate(record.Received || 'N/A'),
+		remarks: record.Remarks || record.remarks || 'No additional remarks'
+	};
 
-  const firstDayOfWeek = new Date(today);
-  firstDayOfWeek.setDate(today.getDate() - distanceToMonday);
-  firstDayOfWeek.setHours(0, 0, 0, 0);
-
-  const lastDayOfWeek = new Date(firstDayOfWeek);
-  lastDayOfWeek.setDate(firstDayOfWeek.getDate() + 6);
-  lastDayOfWeek.setHours(23, 59, 59, 999);
-
-  return {
-    start: firstDayOfWeek,
-    end: lastDayOfWeek
-  };
+	Swal.fire({
+		title: 'Weekly Transmittal Details',
+		html: `
+      <div class="text-left grid grid-cols-2 gap-4">
+        <div>
+          <p><strong>Date:</strong> ${details.date}</p>
+          <p><strong>DR Number:</strong> ${details.drNumber}</p>
+          <p><strong>Vendor:</strong> ${details.vendor}</p>
+          <p><strong>Amount:</strong> $${details.amount}</p>
+          <p><strong>Type:</strong> ${details.type}</p>
+        </div>
+        <div>
+          <p><strong>Status:</strong> ${details.status}</p>
+          <p><strong>Received:</strong> ${details.received}</p>
+          <p><strong>Remarks:</strong> ${details.remarks}</p>
+        </div>
+      </div>
+    `,
+		icon: 'info',
+		confirmButtonText: 'Close',
+		width: '600px'
+	});
 }
 
-// Helper function to check if a date falls within a given date range
-function isDateInRange(date, range) {
-  const normalizedDate = new Date(date);
-  normalizedDate.setHours(0, 0, 0, 0);
-  return normalizedDate >= range.start && normalizedDate <= range.end;
+function populatePendingRecords(dashboardData) {
+	console.log('Full Dashboard Data:', dashboardData);
+
+	const tableBody = document.querySelector('.table-container tbody');
+
+	if (!tableBody) {
+		console.error('Table body not found');
+		return;
+	}
+
+	tableBody.innerHTML = '';
+
+	// Use the centralized pendingRecords from dashboardData
+	let pendingData = dashboardData.pendingRecords || [];
+
+	// Logging and diagnostics
+	console.log('Pending Records:', {
+		totalRecords: pendingData.length,
+		records: pendingData
+	});
+
+	// Sort pending data by date (most recent first)
+	pendingData.sort((a, b) => {
+		const dateA = new Date(a.Date);
+		const dateB = new Date(b.Date);
+		return dateB - dateA;
+	});
+
+	// Update pending count in the UI
+	const pendingCountElement = document.getElementById('pendingCount');
+	if (pendingCountElement) {
+		pendingCountElement.textContent = pendingData.length;
+	}
+
+	// Handle empty data scenarios
+	if (pendingData.length === 0) {
+		const errorMessage = `
+      No pending records found. 
+      Expected: ${dashboardData.pendingCount} records
+      Sources Checked:
+      - Weekly Transmittal: ${dashboardData.weeklyTransmittalData?.length || 0} records
+      - Monthly Data: ${dashboardData.monthlyData?.length || 0} records
+    `;
+		tableBody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500 p-4">${errorMessage}</td></tr>`;
+		console.warn('Pending Records Warning:', errorMessage);
+		return;
+	}
+
+	// Create table header
+	const tableHeader = document.querySelector('.table-container thead');
+	if (tableHeader) {
+		tableHeader.innerHTML = `
+      <tr>
+        <th>#</th>
+        <th>Date</th>
+        <th>DR Number</th>
+        <th>Vendor</th>
+        <th>Amount</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    `;
+	}
+
+	// Populate the table
+	pendingData.forEach((row, index) => {
+		try {
+			// Sanitize amount (remove commas and convert to number)
+			const sanitizedAmount = typeof row.Amount === 'string' ?
+				parseFloat(row.Amount.replace(/,/g, '')) :
+				parseFloat(row.Amount);
+
+			// Format date
+			const formattedDate = formatDate(row.Date);
+
+			// Determine status color
+			const statusColor = getStatusColor(row.Status);
+
+			const tr = document.createElement('tr');
+			tr.innerHTML = `
+        <td>${index + 1}</td>
+        <td>${formattedDate}</td>
+        <td>${row['DR Number'] || 'N/A'}</td>
+        <td>${row.Vendor}</td>
+        <td>$${isNaN(sanitizedAmount) ? 'N/A' : sanitizedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td>
+          <span class="bg-${statusColor}-200 text-${statusColor}-800 px-2 py-1 rounded">
+            ${row.Status}
+          </span>
+        </td>
+        <td>
+          <button class="action-btn text-blue-600 hover:text-blue-800" 
+                  data-index="${index}">
+            View Details
+          </button>
+        </td>`;
+
+			// Add click event for more details
+			tr.querySelector('.action-btn')?.addEventListener('click', (e) => {
+				const dataIndex = e.target.getAttribute('data-index');
+				showPendingRecordDetails(pendingData[dataIndex]);
+			});
+
+			tableBody.appendChild(tr);
+		} catch (error) {
+			console.warn('Error processing pending transmittal row', row, error);
+		}
+	});
 }
 
-// Get the appropriate color for status
-function getStatusColor(status) {
-  switch (status.toLowerCase()) {
-    case 'received':
-      return 'green';
-    case 'pending':
-      return 'yellow';
-    case 'not received':
-      return 'red';
-    default:
-      return 'gray';
-  }
+function showPendingRecordDetails(record) {
+	// More flexible detail extraction
+	const details = {
+		date: formatDate(record.Date || 'N/A'),
+		drNumber: record['DR Number'] || record.DRNumber || record.drNumber || 'N/A',
+		vendor: record.Vendor || record.VendorName || record.vendorName || 'Unknown',
+		amount: parseFloat(record.Amount || record.amount || record.TotalAmount || 0)
+			.toLocaleString('en-US', {
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 2
+			}),
+		status: record.Status || record.status || 'Pending',
+		type: record.Type || record.type || 'N/A',
+		transmitted: formatDate(record.Transmitted || 'N/A'),
+		received: formatDate(record.Received || 'N/A'),
+		late: record.Late || 'N/A',
+		remarks: record.Remarks || record.remarks || 'No additional remarks'
+	};
+
+	Swal.fire({
+		title: 'Pending Delivery Receipt Details',
+		html: `
+      <div class="text-left grid grid-cols-2 gap-4">
+        <div>
+          <p><strong>Date:</strong> ${details.date}</p>
+          <p><strong>DR Number:</strong> ${details.drNumber}</p>
+          <p><strong>Vendor:</strong> ${details.vendor}</p>
+          <p><strong>Amount:</strong> $${details.amount}</p>
+          <p><strong>Type:</strong> ${details.type}</p>
+        </div>
+        <div>
+          <p><strong>Status:</strong> ${details.status}</p>
+          <p><strong>Transmitted:</strong> ${details.transmitted}</p>
+          <p><strong>Received:</strong> ${details.received}</p>
+          <p><strong>Late:</strong> ${details.late}</p>
+          <p><strong>Remarks:</strong> ${details.remarks}</p>
+        </div>
+      </div>
+    `,
+		icon: 'info',
+		confirmButtonText: 'Close',
+		width: '600px'
+	});
 }
 
 // Modify processDashboardData to add more robust error handling
 function processDashboardData(dashboardData) {
-    try {
-        console.log('Dashboard Data:', dashboardData);
+	try {
+		console.log('Dashboard Data:', dashboardData);
 
-        if (!dashboardData || !dashboardData.monthlyData) {
-            showToast('warning', 'No dashboard data available');
-            return;
-        }
+		if (!dashboardData || !dashboardData.monthlyData) {
+			showToast('warning', 'No dashboard data available');
+			return;
+		}
 
-        let monthlyData = [];
+		let monthlyData = [];
 
-        if (Array.isArray(dashboardData.monthlyData)) {
-            monthlyData = dashboardData.monthlyData.map((data, index) => ({
-                month: data.month || `2024-${index + 1}`,
-                totalDR: data.totalDR || 0,
-                lateDR: data.lateDR || 0
-            }));
-        } else {
-            monthlyData = Object.keys(dashboardData.monthlyData).map(monthKey => ({
-                month: monthKey,
-                totalDR: dashboardData.monthlyData[monthKey].totalDR || 0,
-                lateDR: dashboardData.monthlyData[monthKey].lateDR || 0
-            }));
-        }
+		if (Array.isArray(dashboardData.monthlyData)) {
+			monthlyData = dashboardData.monthlyData.map((data, index) => ({
+				month: data.month || `2024-${index + 1}`,
+				totalDR: data.totalDR || 0,
+				lateDR: data.lateDR || 0
+			}));
+		} else {
+			monthlyData = Object.keys(dashboardData.monthlyData).map(monthKey => ({
+				month: monthKey,
+				totalDR: dashboardData.monthlyData[monthKey].totalDR || 0,
+				lateDR: dashboardData.monthlyData[monthKey].lateDR || 0
+			}));
+		}
 
-        // Validate data before chart initialization
-        if (monthlyData.length === 0) {
-            showToast('warning', 'Insufficient data for charts');
-            return;
-        }
+		// Validate data before chart initialization
+		if (monthlyData.length === 0) {
+			showToast('warning', 'Insufficient data for charts');
+			return;
+		}
 
-        // Initialize charts
-        initializeBarChart(monthlyData);
-        initializePieChart(dashboardData.vendorCounts || {});
+		// Initialize charts
+		initializeBarChart(monthlyData);
+		initializePieChart(dashboardData.vendorCounts || {});
 
-        // Trigger a custom event to signal dashboard data is fully loaded
-        const dashboardLoadedEvent = new CustomEvent('dashboardDataLoaded', { 
-            detail: { page: 'dashboard' } 
-        });
-        document.dispatchEvent(dashboardLoadedEvent);
+		// Trigger a custom event to signal dashboard data is fully loaded
+		const dashboardLoadedEvent = new CustomEvent('dashboardDataLoaded', {
+			detail: {
+				page: 'dashboard'
+			}
+		});
+		document.dispatchEvent(dashboardLoadedEvent);
 
-    } catch (error) {
-        handleDashboardError(`Chart initialization failed: ${error.message}`);
-    }
+	} catch (error) {
+		handleDashboardError(`Chart initialization failed: ${error.message}`);
+	}
 }
 
 function initializeBarChart(monthlyData) {
-  try {
-    // Destroy existing chart if it exists
-    if (window.barChartInstance) {
-      window.barChartInstance.destroy();
-    }
+	try {
+		// Destroy existing chart if it exists
+		if (window.barChartInstance) {
+			window.barChartInstance.destroy();
+		}
 
-    const barCtx = document.getElementById('barChart');
-    if (!barCtx) {
-      throw new Error('Bar chart canvas not found');
-    }
+		const barCtx = document.getElementById('barChart');
+		if (!barCtx) {
+			throw new Error('Bar chart canvas not found');
+		}
 
-    // Validate monthlyData
-    if (!monthlyData || monthlyData.length === 0) {
-      showToast('warning', 'No data available for bar chart');
-      return;
-    }
+		// Validate monthlyData
+		if (!monthlyData || monthlyData.length === 0) {
+			showToast('warning', 'No data available for bar chart');
+			return;
+		}
 
-    const labels = monthlyData.map(data => formatMonth(data.month));
-    const lateDRPercentages = monthlyData.map(data => 
-      calculateLateDRPercentage(data.lateDR, data.totalDR)
-    );
-    const tolerableLimit = 10;
+		const labels = monthlyData.map(data => formatMonth(data.month));
+		const lateDRPercentages = monthlyData.map(data =>
+			calculateLateDRPercentage(data.lateDR, data.totalDR)
+		);
+		const tolerableLimit = 10;
 
-    window.barChartInstance = new Chart(barCtx, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [
-          createDataset('Late Submission Percentage (%)', 
-            lateDRPercentages, 
-            'rgba(255, 152, 0, 0.9)', 
-            'rgba(255, 87, 34, 1)', 
-            true
-          ),
-          createDataset('Tolerable Limit (10%)', 
-            Array(monthlyData.length).fill(tolerableLimit), 
-            'rgba(76, 175, 80, 0.7)', 
-            'rgba(56, 142, 60, 1)'
-          )
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: {
-          duration: 1500,
-          easing: 'easeOutQuart'
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            max: 100, // Set max to 100% for consistent percentage scale
-            title: {
-              display: true,
-              text: 'Percentage (%)',
-              font: {
-                weight: 'bold',
-                size: 14
-              }
-            },
-            grid: {
-              color: 'rgba(0, 0, 0, 0.05)',
-              borderDash: [5, 5]
-            },
-            ticks: {
-              font: {
-                size: 12
-              },
-               stepSize: 20, // This sets the step size to 20
-              callback: (value) => value + '%' // Append % to y-axis ticks
-            }
-          },
-          x: {
-            title: {
-              display: true,
-              text: 'Month',
-              font: {
-                weight: 'bold',
-                size: 14
-              }
-            },
-            grid: {
-              display: false
-            },
-            ticks: {
-              font: {
-                size: 12
-              }
-            }
-          }
-        },
-        plugins: {
-          legend: {
-            position: 'top',
-            labels: {
-              font: {
-                size: 14,
-                weight: 'bold'
-              },
-              padding: 20
-            }
-          },
-          tooltip: {
-            callbacks: {
-              label: (tooltipItem) => formatBarTooltip(tooltipItem, monthlyData)
-            },
-            titleFont: {
-              size: 16,
-              weight: 'bold'
-            },
-            bodyFont: {
-              size: 14
-            },
-            padding: 12,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)'
-          }
-        }
-      }
-    });
+		window.barChartInstance = new Chart(barCtx, {
+			type: 'bar',
+			data: {
+				labels: labels,
+				datasets: [
+					createDataset('Late Submission Percentage (%)',
+						lateDRPercentages,
+						'rgba(255, 152, 0, 0.9)',
+						'rgba(255, 87, 34, 1)',
+						true
+					),
+					createDataset('Tolerable Limit (10%)',
+						Array(monthlyData.length).fill(tolerableLimit),
+						'rgba(76, 175, 80, 0.7)',
+						'rgba(56, 142, 60, 1)'
+					)
+				]
+			},
+			options: {
+				responsive: true,
+				maintainAspectRatio: false,
+				animation: {
+					duration: 1500,
+					easing: 'easeOutQuart'
+				},
+				scales: {
+					y: {
+						beginAtZero: true,
+						max: 100, // Set max to 100% for consistent percentage scale
+						title: {
+							display: true,
+							text: 'Percentage (%)',
+							font: {
+								weight: 'bold',
+								size: 14
+							}
+						},
+						grid: {
+							color: 'rgba(0, 0, 0, 0.05)',
+							borderDash: [5, 5]
+						},
+						ticks: {
+							font: {
+								size: 12
+							},
+							stepSize: 20, // This sets the step size to 20
+							callback: (value) => value + '%' // Append % to y-axis ticks
+						}
+					},
+					x: {
+						title: {
+							display: true,
+							text: 'Month',
+							font: {
+								weight: 'bold',
+								size: 14
+							}
+						},
+						grid: {
+							display: false
+						},
+						ticks: {
+							font: {
+								size: 12
+							}
+						}
+					}
+				},
+				plugins: {
+					legend: {
+						position: 'top',
+						labels: {
+							font: {
+								size: 14,
+								weight: 'bold'
+							},
+							padding: 20
+						}
+					},
+					tooltip: {
+						callbacks: {
+							label: (tooltipItem) => formatBarTooltip(tooltipItem, monthlyData)
+						},
+						titleFont: {
+							size: 16,
+							weight: 'bold'
+						},
+						bodyFont: {
+							size: 14
+						},
+						padding: 12,
+						backgroundColor: 'rgba(0, 0, 0, 0.8)'
+					}
+				}
+			}
+		});
 
-    // Optional: Add resize listener
-    window.addEventListener('resize', () => {
-      if (window.barChartInstance) {
-        window.barChartInstance.resize();
-      }
-    });
+		// Optional: Add resize listener
+		window.addEventListener('resize', () => {
+			if (window.barChartInstance) {
+				window.barChartInstance.resize();
+			}
+		});
 
-  } catch (error) {
-    console.error('Bar Chart Initialization Error:', error);
-    showToast('error', `Failed to initialize bar chart: ${error.message}`);
-  }
+	} catch (error) {
+		console.error('Bar Chart Initialization Error:', error);
+		showToast('error', `Failed to initialize bar chart: ${error.message}`);
+	}
 }
 
 function createDataset(label, data, backgroundColor, borderColor, isGradient = false) {
-  return {
-    label: label,
-    data: data,
-    backgroundColor: isGradient ? createGradient() : backgroundColor,
-    borderColor: borderColor,
-    borderWidth: 2,
-    barThickness: 35,
-    hoverBackgroundColor: backgroundColor.replace('0.7', '1'),
-    hoverBorderColor: borderColor,
-    hoverBorderWidth: 3,
-  };
+	return {
+		label: label,
+		data: data,
+		backgroundColor: isGradient ? createGradient() : backgroundColor,
+		borderColor: borderColor,
+		borderWidth: 2,
+		barThickness: 35,
+		hoverBackgroundColor: backgroundColor.replace('0.7', '1'),
+		hoverBorderColor: borderColor,
+		hoverBorderWidth: 3,
+	};
 }
 
 function createGradient() {
-  const ctx = document.getElementById('barChart').getContext('2d');
-  const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-  gradient.addColorStop(0, 'rgba(255, 152, 0, 1)');
-  gradient.addColorStop(1, 'rgba(255, 87, 34, 1)');
-  return gradient;
+	const ctx = document.getElementById('barChart').getContext('2d');
+	const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+	gradient.addColorStop(0, 'rgba(255, 152, 0, 1)');
+	gradient.addColorStop(1, 'rgba(255, 87, 34, 1)');
+	return gradient;
 }
 
 function initializePieChart(vendorCounts) {
-  try {
-    // Destroy existing chart if it exists
-    if (window.pieChartInstance) {
-      window.pieChartInstance.destroy();
-    }
+	try {
+		// Destroy existing chart if it exists
+		if (window.pieChartInstance) {
+			window.pieChartInstance.destroy();
+		}
 
-    const pieCtx = document.getElementById('pieChart');
-    if (!pieCtx) {
-      throw new Error('Pie chart canvas not found');
-    }
+		const pieCtx = document.getElementById('pieChart');
+		if (!pieCtx) {
+			throw new Error('Pie chart canvas not found');
+		}
 
-    // Filter out zero-count vendors
-    const vendors = Object.keys(vendorCounts).filter(
-      vendor => vendorCounts[vendor] > 0
-    );
-    const counts = vendors.map(vendor => vendorCounts[vendor]);
+		// Filter out zero-count vendors
+		const vendors = Object.keys(vendorCounts).filter(
+			vendor => vendorCounts[vendor] > 0
+		);
+		const counts = vendors.map(vendor => vendorCounts[vendor]);
 
-    // Check if there's data
-    if (vendors.length === 0) {
-      showToast('warning', 'No vendor data available');
-      return;
-    }
+		// Check if there's data
+		if (vendors.length === 0) {
+			showToast('warning', 'No vendor data available');
+			return;
+		}
 
-    window.pieChartInstance = new Chart(pieCtx, {
-      type: 'pie',
-      data: {
-        labels: vendors,
-        datasets: [{
-          label: 'Vendor Distribution ',
-          data: counts,
-          backgroundColor: generateColors(vendors.length),
-          borderColor: '#ffffff',
-          borderWidth: 3,
-          hoverOffset: 15,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        layout: {
-          padding: {
-            left: 25,
-            right: 25,
-            top: 25,
-            bottom: 25
-          }
-        },
-        plugins: {
-          legend: {
-            position: 'right',
-            labels: {
-              font: {
-                size: 12,
-                weight: 'bold'
-              },
-              color: '#374151',
-              padding: 15,
-              generateLabels: (chart) => {
-                const data = chart.data;
-                return data.labels.map((label, index) => {
-                  const value = data.datasets[0].data[index];
-                  return {
-                    text: `${label}: ${value}`, // Removed percentage from legend
-                    fillStyle: data.datasets[0].backgroundColor[index],
-                    hidden: false,
-                    index: index
-                  };
-                });
-              }
-            }
-          },
-          tooltip: {
-            callbacks: {
-              label: (tooltipItem) => {
-                const vendor = vendors[tooltipItem.dataIndex];
-                const count = counts[tooltipItem.dataIndex];
-                return `${vendor}: ${count}`; // Tooltip shows count only
-              }
-            },
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            titleFont: {
-              size: 16,
-              weight: 'bold'
-            },
-            bodyFont: {
-              size: 14
-            },
-            padding: 12
-          }
-        },
-        animation: {
-          animateRotate: true,
-          animateScale: true,
-          duration: 1500,
-          easing: 'easeOutQuart'
-        }
-      }
-    });
+		window.pieChartInstance = new Chart(pieCtx, {
+			type: 'pie',
+			data: {
+				labels: vendors,
+				datasets: [{
+					label: 'Vendor Distribution ',
+					data: counts,
+					backgroundColor: generateColors(vendors.length),
+					borderColor: '#ffffff',
+					borderWidth: 3,
+					hoverOffset: 15,
+				}]
+			},
+			options: {
+				responsive: true,
+				maintainAspectRatio: false,
+				layout: {
+					padding: {
+						left: 25,
+						right: 25,
+						top: 25,
+						bottom: 25
+					}
+				},
+				plugins: {
+					legend: {
+						position: 'right',
+						labels: {
+							font: {
+								size: 12,
+								weight: 'bold'
+							},
+							color: '#374151',
+							padding: 15,
+							generateLabels: (chart) => {
+								const data = chart.data;
+								return data.labels.map((label, index) => {
+									const value = data.datasets[0].data[index];
+									return {
+										text: `${label}: ${value}`, // Removed percentage from legend
+										fillStyle: data.datasets[0].backgroundColor[index],
+										hidden: false,
+										index: index
+									};
+								});
+							}
+						}
+					},
+					tooltip: {
+						callbacks: {
+							label: (tooltipItem) => {
+								const vendor = vendors[tooltipItem.dataIndex];
+								const count = counts[tooltipItem.dataIndex];
+								return `${vendor}: ${count}`; // Tooltip shows count only
+							}
+						},
+						backgroundColor: 'rgba(0, 0, 0, 0.8)',
+						titleFont: {
+							size: 16,
+							weight: 'bold'
+						},
+						bodyFont: {
+							size: 14
+						},
+						padding: 12
+					}
+				},
+				animation: {
+					animateRotate: true,
+					animateScale: true,
+					duration: 1500,
+					easing: 'easeOutQuart'
+				}
+			}
+		});
 
-    // Add resize listener
-    window.addEventListener('resize', () => {
-      if (window.pieChartInstance) {
-        window.pieChartInstance.resize();
-      }
-    });
+		// Add resize listener
+		window.addEventListener('resize', () => {
+			if (window.pieChartInstance) {
+				window.pieChartInstance.resize();
+			}
+		});
 
-  } catch (error) {
-    console.error('Pie Chart Initialization Error:', error);
-    showToast('error', `Failed to initialize pie chart: ${error.message}`);
-  }
-}
-
-function calculateLateDRPercentage(lateDR, totalDR) {
-  return totalDR > 0 ? (lateDR / totalDR) * 100 : 0;
+	} catch (error) {
+		console.error('Pie Chart Initialization Error:', error);
+		showToast('error', `Failed to initialize pie chart: ${error.message}`);
+	}
 }
 
 function formatBarTooltip(tooltipItem, monthlyData) {
-  const monthIndex = tooltipItem.dataIndex;
-  const {
-    lateDR,
-    totalDR
-  } = monthlyData[monthIndex];
-  const percentage = calculateLateDRPercentage(lateDR, totalDR).toFixed(2);
-  return `${lateDR} of ${totalDR} documents submitted late (${percentage}%)`;
+	const monthIndex = tooltipItem.dataIndex;
+	const {
+		lateDR,
+		totalDR
+	} = monthlyData[monthIndex];
+	const percentage = calculateLateDRPercentage(lateDR, totalDR).toFixed(2);
+	return `${lateDR} of ${totalDR} documents submitted late (${percentage}%)`;
 }
 
 function formatPieTooltip(tooltipItem, vendors, counts) {
-  const index = tooltipItem.dataIndex;
-  return `${vendors[index]}: ${counts[index]}`;
+	const index = tooltipItem.dataIndex;
+	return `${vendors[index]}: ${counts[index]}`;
 }
-
-function formatMonth(monthKey) {
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-  const [year, month] = monthKey.split('-');
-  return `${monthNames[parseInt(month, 10) - 1]} ${year}`;
-}
-
-function generateColors(count) {
-  const colors = [
-    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
-    '#9966FF', '#FF9F40', '#FF4081', '#3F51B5',
-    '#2196F3', '#FFC107', '#9C27B0', '#8BC34A',
-    '#FF5722', '#009688', '#795548', '#607D8B'
-  ];
-  return Array.from({
-    length: count
-  }, (_, i) => colors[i % colors.length]);
-} 
 </script>
