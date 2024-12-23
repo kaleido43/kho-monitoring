@@ -1,199 +1,632 @@
 <script>
-	// Load and initialize the transmittal page with optional status or month filter
-	function transmittalElements() {
-		initializeDataTable(); // Initialize DataTable without a default status
-		setDefaultMonthFilter(); // Set the default month filter to the current month
-		loadTransmittalData(storeName, getSelectedMonth()); // Load transmittal data for the current month by default
-		setupEventHandlers(); // Set up event handlers for buttons
-		setupModals(); // Setup the add data modal
-		initializeMonthFilter(); // Initialize month filter
-		setupBulkEditMode(); // Setup bulk edit mode
-		setupFabActions(userType); // Setup FAB actions
-		setupStatusFilter(); // Setup status filter
-	}
+function transmittalElements() {
+    initializeDataTable(); 
+    setDefaultFilterToToday(); 
+
+    // Manage visibility based on user type
+    if (userType === 'Administrator') {
+        $('#bulkEditToggleContainer').show();
+        $('#openAddModalButton').hide();
+    } else if (userType === 'USER') {
+        $('#bulkEditToggleContainer').hide();
+        setupModals();
+        $('#openAddModalButton').show();
+    }
+
+    if (isStoreSpecificView) {
+        loadTransmittalData(storeName, getSelectedMonth);
+    } else {
+        loadTransmittalData(storeName, 'today');
+    }
+
+    setupEventHandlers();
+    initializeDateFilterOptions();
+    setupBulkEditMode();
+    setupFabActions(userType);
+    setupStatusFilter();
+    setupPrintButton();
+    setupRowDetailsModal();
+}
 
 // Setup event handlers for status selection
 function setupStatusFilter() {
-	const statusItems = document.querySelectorAll('#transmittalButtonGroup .dropdown-item');
+    const statusItems = document.querySelectorAll('#transmittalButtonGroup .dropdown-item');
+    const statusDropdownButton = document.querySelector('#transmittalButtonGroup button');
 
-	statusItems.forEach(item => {
-		item.addEventListener('click', function(event) {
-			event.preventDefault(); // Prevent default anchor behavior
-			const selectedStatus = this.textContent.trim(); // Get the selected status
+    statusItems.forEach(item => {
+        item.addEventListener('click', function(event) {
+            event.preventDefault();
+            const selectedStatus = this.textContent.trim();
 
-			if (selectedStatus === 'Refresh') {
-				resetStatusFilter(); // Reset filter and reload all data
-			} else {
-				updateStatusDropdown(selectedStatus); // Update dropdown label
-				applyStatusFilter(selectedStatus); // Filter data based on status
-			}
-		});
-	});
+            // Handle Refresh separately
+            if (selectedStatus === 'Refresh') {
+                resetStatusFilter();
+                return;
+            }
+
+            // Update dropdown button
+            updateStatusDropdown(selectedStatus);
+
+            // Get the current active filter
+            const currentFilterType = $('#dateFilterType').val();
+            let filterCriteria;
+
+            // Determine the current filter criteria based on the selected filter type
+            switch (currentFilterType) {
+                case 'today':
+                    filterCriteria = 'today';
+                    break;
+                case 'weekly':
+                    filterCriteria = 'weekly';
+                    break;
+                case 'monthly':
+                    filterCriteria = getSelectedMonth();
+                    break;
+                case 'custom':
+                    const startDate = $('#startDate').val();
+                    const endDate = $('#endDate').val();
+                    filterCriteria = {
+                        start: startDate,
+                        end: endDate
+                    };
+                    break;
+                default:
+                    filterCriteria = null;
+            }
+
+            // Apply composite filter
+            applyCompositeFilter(filterCriteria, selectedStatus);
+
+            // Close dropdown
+            this.closest('.dropdown').querySelector('.dropdown-toggle').click();
+        });
+    });
+
+    // Apply composite filter (date + status)
+    function applyCompositeFilter(dateFilter, status) {
+        // Get the full dataset from cache
+        const fullDataset = transmittalDataCache || [];
+
+        // First, filter by date
+        let filteredData = filterDataByDate(fullDataset, dateFilter);
+
+        // Then, filter by status
+        if (status && status !== 'Refresh') {
+            const normalizedStatus = status.trim().toUpperCase();
+            filteredData = filteredData.filter(item => 
+                item.Status.trim().toUpperCase() === normalizedStatus
+            );
+        }
+
+        // Update the DataTable
+        updateDataTable(filteredData);
+
+        // Update visual feedback
+        updateFilterVisualFeedback(status, filteredData.length, fullDataset.length);
+    }
+
+    // Update Status Dropdown Label
+    function updateStatusDropdown(status) {
+        // Define status colors for enhanced visual feedback
+        const statusColors = {
+            'Pending': 'text-yellow-600',
+            'Received': 'text-green-600',
+            'Not Received': 'text-red-600'
+        };
+
+        const colorClass = statusColors[status] || 'text-gray-600';
+
+        statusDropdownButton.innerHTML = `
+            <i class="fas fa-cogs fs-5"></i> 
+            <span class="${colorClass}">${status}</span> 
+            <span class="visually-hidden">Toggle Dropdown</span>
+        `;
+    }
+
+    // Reset Status Filter
+    function resetStatusFilter() {
+        // Reset dropdown
+        statusDropdownButton.innerHTML = `
+            <i class="fas fa-cogs fs-5"></i> Status 
+            <span class="visually-hidden">Toggle Dropdown</span>
+        `;
+
+        // Reapply the current date filter
+        const currentFilterType = $('#dateFilterType').val();
+        let filterCriteria;
+
+        switch (currentFilterType) {
+            case 'today':
+                filterCriteria = 'today';
+                break;
+            case 'weekly':
+                filterCriteria = 'weekly';
+                break;
+            case 'monthly':
+                filterCriteria = getSelectedMonth();
+                break;
+            case 'custom':
+                const startDate = $('#startDate').val();
+                const endDate = $('#endDate').val();
+                filterCriteria = {
+                    start: startDate,
+                    end: endDate
+                };
+                break;
+        }
+
+        // Reapply the current filter without status
+        applyCompositeFilter(filterCriteria, null);
+    }
+
+    // Update filter visual feedback
+    function updateFilterVisualFeedback(status, filteredCount, totalCount) {
+        // Optional: Show toast with filtering information
+        showToast('info', `Showing ${filteredCount} of ${totalCount} entries with status: ${status || 'All'}`);
+    }
 }
 
-// Apply Status Filter to DataTable
-function applyStatusFilter(status) {
-	const dataTable = $('#storeTransmittalTable').DataTable();
+function filterDataByDate(data, filterCriteria) {
+    if (!filterCriteria) return data;
 
-	// Set the search value based on the selected status
-	let searchValue = "";
+    return data.filter(item => {
+        const transmittedDate = parseDateFlexibly(item.Transmitted);
+        
+        if (!transmittedDate) return false;
 
-	// Use switch to set the correct search value for filtering
-	switch (status) {
-		case "Pending":
-			searchValue = "^Pending$"; // Filter only for 'Pending'
+        if (typeof filterCriteria === 'string') {
+            switch (filterCriteria) {
+                case 'today':
+                    const today = new Date();
+                    return transmittedDate.toDateString() === today.toDateString();
+                
+                case 'weekly':
+                    const currentDate = new Date();
+                    const startOfWeek = new Date(currentDate);
+                    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+                    const endOfWeek = new Date(currentDate);
+                    endOfWeek.setDate(currentDate.getDate() + (6 - currentDate.getDay()));
+                    
+                    return transmittedDate >= startOfWeek && transmittedDate <= endOfWeek;
+            }
+
+            // Monthly filter
+            if (filterCriteria.includes('-')) {
+                const [filterYear, filterMonth] = filterCriteria.split('-').map(Number);
+                return transmittedDate.getFullYear() === filterYear && 
+                       transmittedDate.getMonth() + 1 === filterMonth;
+            }
+        }
+
+        // Custom date range filter
+        if (filterCriteria.start && filterCriteria.end) {
+            const startDate = new Date(filterCriteria.start);
+            const endDate = new Date(filterCriteria.end);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(23, 59, 59, 999);
+
+            return transmittedDate >= startDate && transmittedDate <= endDate;
+        }
+
+        return true;
+    });
+}
+
+// Initialize date filter options
+function initializeDateFilterOptions() {
+	// Set default month to current month
+	function setCurrentMonth() {
+		const currentDate = new Date();
+		const currentYear = currentDate.getFullYear();
+		const currentMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
+		const formattedMonth = `${currentYear}-${currentMonth}`;
+
+		$('#monthFilter').val(formattedMonth);
+	}
+
+	// Show/hide appropriate filter inputs based on selected filter type
+	$('#dateFilterType').on('change', function() {
+		const selectedType = $(this).val();
+
+		// Hide all custom inputs first
+		$('#monthFilter, #customDateRange').hide();
+
+		// Show appropriate input based on selected type
+		switch (selectedType) {
+			case 'monthly':
+				$('#monthFilter').show();
+				setCurrentMonth(); // Automatically set to current month
+				break;
+			case 'custom':
+				$('#customDateRange').show();
+				break;
+			case 'today':
+			case 'weekly':
+				// No additional inputs needed
+				break;
+		}
+	});
+
+	// Trigger change event to set initial state
+	$('#dateFilterType').trigger('change');
+
+	// Filter button click handler
+	$('#filterByDate').on('click', function() {
+		const filterType = $('#dateFilterType').val();
+		let filterCriteria;
+
+		switch (filterType) {
+			case 'monthly':
+				filterCriteria = getSelectedMonth();
+				break;
+			case 'today':
+				filterCriteria = 'today';
+				break;
+			case 'weekly':
+				filterCriteria = 'weekly';
+				break;
+			case 'custom':
+				const startDate = $('#startDate').val();
+				const endDate = $('#endDate').val();
+
+				// Validate date range
+				if (!startDate || !endDate) {
+					showToast('warning', 'Please select both start and end dates');
+					return;
+				}
+
+				if (new Date(startDate) > new Date(endDate)) {
+					showToast('warning', 'Start date must be before end date');
+					return;
+				}
+
+				filterCriteria = {
+					start: startDate,
+					end: endDate
+				};
+				break;
+		}
+
+		// Log the filter criteria for debugging
+		console.log('Applying filter:', filterType, filterCriteria);
+
+		// Load transmittal data with the selected filter
+		loadTransmittalData(storeName, filterCriteria);
+	});
+
+	// Add event listener to update filter label
+	$('#dateFilterType').on('change', updateFilterLabel);
+}
+
+// Update filter label based on selected filter type
+function updateFilterLabel() {
+	const filterType = $('#dateFilterType').val();
+	let labelText = 'Filter';
+
+	switch (filterType) {
+		case 'today':
+			labelText = 'Today';
 			break;
-		case "Received":
-			searchValue = "^Received$"; // Filter only for 'Received'
+		case 'weekly':
+			labelText = 'This Week';
 			break;
-		case "Not Received":
-			searchValue = "^Not Received$"; // Filter only for 'Not Received'
+		case 'monthly':
+			const selectedMonth = getSelectedMonth();
+			labelText = formatMonthLabel(selectedMonth);
 			break;
-		default:
-			searchValue = ""; // Clear filter if the status is unrecognized
+		case 'custom':
+			const startDate = $('#startDate').val();
+			const endDate = $('#endDate').val();
+			labelText = startDate && endDate ?
+				formatCustomDateRange(startDate, endDate) :
+				'Custom Range';
 			break;
 	}
 
-	// Apply the search filter to the DataTable for exact matches
-	dataTable.column(6).search(searchValue, true, false).draw(); // Assuming the 'Status' column is 6th
+	// Update the filter label (assuming you have a label element)
+	$('#filterLabel').text(labelText);
 }
 
-// Reset Status Filter
-function resetStatusFilter() {
-	resetStatusDropdown(); // Reset the dropdown label
-	$('#storeTransmittalTable').DataTable().column(6).search('').draw(); // Clear the filter
-}
-
-// Update Status Dropdown Label
-function updateStatusDropdown(status) {
-	$('#transmittalButtonGroup button').html(`<i class="fas fa-cogs fs-5"></i> ${status} <span class="visually-hidden">Toggle Dropdown</span>`);
-}
-
-// Reset Status Dropdown to default
-function resetStatusDropdown() {
-	$('#transmittalButtonGroup button').html(`<i class="fas fa-cogs fs-5"></i> Status <span class="visually-hidden">Toggle Dropdown</span>`);
-}
-
-// Month Filter Initialization
-function initializeMonthFilter() {
-	$('#filterByMonth').on('click', function() {
-		const selectedMonth = getSelectedMonth();
-		loadTransmittalData(storeName, selectedMonth);
-	});
-}
-
-// Bulk Edit Mode Setup
-
-function setupBulkEditMode() {
-	$('#bulkEditSwitch').on('change', function() {
-		if (this.checked) {
-			enableRowSelection();
-			$('#fab-main-container').removeClass('hidden');
-		} else {
-			disableRowSelection();
-			$('#fab-main-container').addClass('hidden');
-		}
-	});
-}
-
-// Enable Row Selection for Bulk Edit
+// Enhanced row selection to provide better visual feedback
 function enableRowSelection() {
-	const dataTable = $('#storeTransmittalTable').DataTable();
-	$('#storeTransmittalTable tbody').on('click', 'tr', function() {
-		const rowData = dataTable.row(this).data();
-		if ($(this).hasClass('selected')) {
-			$(this).removeClass('selected selected-row'); // Remove selected and custom class
-			selectedRows = selectedRows.filter(item => item.ID !== rowData.ID);
-		} else {
-			$(this).addClass('selected selected-row'); // Add both classes
-			selectedRows.push(rowData);
-		}
-
-		// Log the class to check if it's being applied
-		console.log($(this).attr('class'));
-	});
+    const dataTable = $('#storeTransmittalTable').DataTable();
+    
+    $('#storeTransmittalTable tbody').on('click', 'tr', function(e) {
+        e.stopPropagation();
+        
+        // Prevent selection if bulk action is in progress
+        if (window.bulkActionInProgress) {
+            return;
+        }
+        
+        const rowData = dataTable.row(this).data();
+        
+        // Toggle selected class with visual feedback
+        if ($(this).hasClass('selected')) {
+            $(this).removeClass('selected bulk-selected');
+            selectedRows = selectedRows.filter(item => item.ID !== rowData.ID);
+        } else {
+            $(this).addClass('selected bulk-selected');
+            selectedRows.push(rowData);
+        }
+        
+        // Update selected count
+        updateSelectedCount();
+    });
 }
 
 // Disable Row Selection
 function disableRowSelection() {
-	const dataTable = $('#storeTransmittalTable').DataTable();
-	$('#storeTransmittalTable tbody tr').removeClass('selected');
-	selectedRows = [];
-	$('#storeTransmittalTable tbody').off('click', 'tr');
+  const dataTable = $('#storeTransmittalTable').DataTable();
+  
+  // Unbind click event
+  $('#storeTransmittalTable tbody').off('click', 'tr');
+  
+  // Remove selected classes
+  $('#storeTransmittalTable tbody tr').removeClass('selected bulk-selected');
+  
+  // Clear selected rows
+  selectedRows = [];
+  
+  // Remove any existing badges
+  $('#fabActionsContainer').find('.badge').remove();
 }
 
-// Function to set the visibility of the bulk edit switch
-function toggleBulkEditSwitch(userType) {
-    if (userType === 'Administrator') {
-        $('#bulkEditLabel').show(); // Show the switch for Administrators
-    } else if (userType === 'USER') {
-        $('#bulkEditLabel').hide(); // Hide the switch for regular users
+// Update selected count with enhanced visibility
+function updateSelectedCount() {
+    // Remove existing badges first
+    $('#fabActionsContainer').find('.badge').remove();
+    
+    // Optional: Show selected count in the bulk actions container
+    const selectedCount = selectedRows.length;
+    
+    if (selectedCount > 0) {
+        $('#fabActionsContainer').find('.btn').each(function() {
+            $(this).append(`
+                <span class="ml-2 badge bg-light text-dark">
+                    ${selectedCount}
+                </span>
+            `);
+        });
     }
 }
 
-// Setup event handlers for bulk actions
-function setupFabActions(userType) {
-    toggleBulkEditSwitch(userType); // Call the function to toggle visibility
+function toggleBulkEditSwitch(userType) {
+    // Get the bulk edit switch element
+    const bulkEditSwitch = $('#bulkEditSwitch');
+    const bulkEditToggleContainer = $('#bulkEditToggleContainer');
     
-    $('#bulkReceivedButton').on('click', () => processBulkUpdate('markReceived'));
-    $('#bulkNotReceivedButton').on('click', () => processBulkUpdate('markNotReceived'));
-    $('#bulkDeleteButton').on('click', () => handleBulkAction('Deleted', 'delete', processBulkDelete));
+    if (!bulkEditSwitch.length) {
+        console.warn('Bulk edit switch element not found');
+        return;
+    }
+
+    // Set visibility and state based on user type
+    if (userType === 'Administrator') {
+        bulkEditToggleContainer.show();
+        bulkEditSwitch.prop('disabled', false);
+    } else {
+        bulkEditToggleContainer.hide();
+        bulkEditSwitch.prop('disabled', true);
+    }
+
+    // Add change event listener
+    bulkEditSwitch.off('change').on('change', function(e) {
+        const isChecked = $(this).prop('checked');
+        manageBulkEditMode(isChecked);
+    });
 }
 
-// Handle bulk actions with confirmation
-function handleBulkAction(actionText, actionType, actionCallback) {
-	if (selectedRows.length > 0) {
-		Swal.fire({
-			title: `Are you sure?`,
-			text: `You are about to ${actionType} ${selectedRows.length} items.`,
-			icon: 'warning',
-			showCancelButton: true,
-			confirmButtonText: `Yes, ${actionType} them`
-		}).then(result => {
-			if (result.isConfirmed) {
-				actionCallback();
-			}
-		});
-	} else {
-		Swal.fire('No rows selected', 'Please select at least one row.', 'info');
-	}
+// Modify setupFabActions to handle mode reset
+function setupFabActions(userType) {
+    toggleBulkEditSwitch(userType);
+
+    // Create a centralized bulk action handler
+    function performBulkAction(actionType, processingFunction) {
+        // Prevent multiple simultaneous actions
+        if (window.bulkActionInProgress) {
+            showToast('warning', 'Another bulk action is in progress');
+            return;
+        }
+
+        // Check if rows are selected
+        if (selectedRows.length === 0) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'No Rows Selected',
+                text: 'Please select at least one row to perform bulk action.'
+            });
+            return;
+        }
+
+        // Confirmation dialog
+        Swal.fire({
+            title: `Confirm ${actionType}`,
+            text: `You are about to ${actionType.toLowerCase()} ${selectedRows.length} items.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: `Yes, ${actionType.toLowerCase()} them`
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Block the UI
+                blockUI('Processing bulk action...');
+
+                // Set action in progress flag
+                window.bulkActionInProgress = true;
+
+                // Perform the bulk action
+                processingFunction()
+                    .then(handleBulkActionSuccess)
+                    .catch(handleBulkActionError)
+                    .finally(finalizeBlukAction);
+            }
+        });
+    }
+
+    // Bulk action success handler
+    function handleBulkActionSuccess(response) {
+        Swal.fire({
+            icon: 'success',
+            title: 'Bulk Action Completed',
+            text: response || 'Action successful'
+        });
+    }
+
+    // Bulk action error handler
+    function handleBulkActionError(error) {
+        console.error('Bulk action error:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Bulk Action Failed',
+            text: error.message || 'An error occurred during the bulk action'
+        });
+    }
+
+    // Finalize bulk action
+    function finalizeBlukAction() {
+        // Unblock UI
+        unblockUI();
+
+        // Reset bulk edit mode
+        resetBulkEditMode();
+
+        // Refresh data
+        refreshTransmittalData();
+
+        // Reset action in progress flag
+        window.bulkActionInProgress = false;
+    }
+
+    // Attach event handlers with the new centralized approach
+    $('#bulkReceivedButton').on('click', () => 
+        performBulkAction('Received', () => 
+            processBulkUpdate('markReceived')
+        )
+    );
+
+    $('#bulkNotReceivedButton').on('click', () => 
+        performBulkAction('Not Received', () => 
+            processBulkUpdate('markNotReceived')
+        )
+    );
+
+    $('#bulkDeleteButton').on('click', () => 
+        performBulkAction('Delete', processBulkDelete)
+    );
 }
 
-// Bulk Update Process for Received or Not Received
+// Reset bulk edit mode
+function resetBulkEditMode() {
+    // Programmatically uncheck the bulk edit switch
+    $('#bulkEditSwitch')
+        .prop('checked', false)
+        .trigger('change');
+}
+
+// Promised-based bulk update
 function processBulkUpdate(actionType) {
-	console.log('Action Type received:', actionType);
+    return new Promise((resolve, reject) => {
+        const idsToUpdate = selectedRows.map(row => row.ID);
+        const status = getStatusFromActionType(actionType);
 
-	const idsToUpdate = selectedRows.map(row => row.ID);
+        if (!status) {
+            reject(new Error('Invalid action type'));
+            return;
+        }
 
-	if (idsToUpdate.length === 0) {
-		console.warn('No rows selected for update.');
-		Swal.fire('Warning', 'No rows selected for update.', 'warning');
-		return; // Exit if no rows to update
-	}
+        google.script.run
+            .withSuccessHandler(response => resolve(response))
+            .withFailureHandler(error => reject(error))
+            .updateBulkStatus(idsToUpdate, status, storeName);
+    });
+}
 
-	const status = getStatusFromActionType(actionType); // Get status based on action type
+// Promised-based bulk delete
+function processBulkDelete() {
+    return new Promise((resolve, reject) => {
+        const idsToDelete = selectedRows.map(row => row.ID);
 
-	if (!status) {
-		console.error('Invalid action type received.');
-		Swal.fire('Error', 'Invalid action type.', 'error');
-		return; // Exit function if action type is invalid
-	}
+        google.script.run
+            .withSuccessHandler(response => resolve(response))
+            .withFailureHandler(error => reject(error))
+            .deleteBulkData(idsToDelete, storeName);
+    });
+}
 
-	console.log('IDs to update:', idsToUpdate);
-	console.log('Status to set:', status);
+// Reset bulk edit mode
+function resetBulkEditMode() {
+    // Programmatically uncheck the bulk edit switch
+    $('#bulkEditSwitch').prop('checked', false).trigger('change');
+    
+    // Clear selected rows
+    selectedRows = [];
+    
+    // Disable row selection
+    disableRowSelection();
+}
 
-	const sheetName = storeName; // Assuming storeName refers to the sheet name
+// Refresh transmittal data
+function refreshTransmittalData() {
+    // Invalidate caches
+    invalidateCaches();
+    
+    // Reload data with current filter
+    loadTransmittalData(storeName, getSelectedMonth());
+    
+    // Optionally refresh dashboard
+    fetchDashboardData();
+}
 
-	google.script.run.withSuccessHandler(() => {
-		Swal.fire('Success', `Selected rows were marked as ${status}!`, 'success');
-		invalidateCaches();
-		loadTransmittalData(storeName, getSelectedMonth());
-		fetchDashboardData();
-    showToast('success', `${selectedRows.length} rows marked as ${status}`);
-	}).withFailureHandler(error => {
-		console.error('Error updating status:', error);
-    showToast('error', `Failed to update: ${error.message}`);
-	}).updateBulkStatus(idsToUpdate, status, sheetName);
+// Enhance setupBulkEditMode to handle state and prevent multiple modes
+function setupBulkEditMode() {
+    // Toggle switch change event
+    $('#bulkEditSwitch').on('change', function(e) {
+        e.stopPropagation();
+        
+        // Prevent bulk edit during ongoing actions
+        if (window.bulkActionInProgress) {
+            $(this).prop('checked', false);
+            showToast('warning', 'Cannot enter bulk edit during an action');
+            return;
+        }
+        
+        const isChecked = $(this).prop('checked');
+        
+        manageBulkEditMode(isChecked);
+    });
+
+    // Cancel Bulk Edit Button
+    $('#cancelBulkEdit').on('click', function(e) {
+        e.stopPropagation();
+        
+        // Programmatically uncheck the switch
+        $('#bulkEditSwitch')
+            .prop('checked', false)
+            .trigger('change');
+    });
+}
+
+function manageBulkEditMode(isChecked) {
+    if (isChecked) {
+        // Bulk Edit Mode ON
+        $('#bulkEditToggleContainer').addClass('hidden');
+        $('#fabActionsContainer').removeClass('hidden');
+        enableRowSelection();
+        $('#storeTransmittalTable tbody tr').addClass('bulk-edit-mode');
+    } else {
+        // Bulk Edit Mode OFF
+        $('#bulkEditToggleContainer').removeClass('hidden');
+        $('#fabActionsContainer').addClass('hidden');
+        disableRowSelection();
+        $('#storeTransmittalTable tbody tr')
+            .removeClass('bulk-edit-mode selected');
+        
+        // Clear any selected rows
+        selectedRows = [];
+        
+        // Remove any selection badges
+        $('#fabActionsContainer').find('.badge').remove();
+    }
 }
 
 // Map action types to statuses
@@ -208,26 +641,13 @@ function getStatusFromActionType(actionType) {
 	}
 }
 
-// Bulk Delete Process
-function processBulkDelete() {
-	const idsToDelete = selectedRows.map(row => row.ID);
-	const sheetName = storeName; // Assuming storeName refers to the sheet name
+// Set default filter to today
+function setDefaultFilterToToday() {
+	// Set the date filter type to 'today'
+	$('#dateFilterType').val('today');
 
-	google.script.run.withSuccessHandler(() => {
-		Swal.fire('Success', 'Selected rows were deleted!', 'success');
-		invalidateCaches();
-		loadTransmittalData(storeName, getSelectedMonth());
-		fetchDashboardData();
-    showToast('success', `${selectedRows.length} rows deleted`);
-	}).withFailureHandler(error => {
-		showToast('error', `Failed to delete: ${error.message}`);
-	}).deleteBulkData(idsToDelete, sheetName);
-}
-
-function setDefaultMonthFilter() {
-	const currentDate = new Date();
-	const formattedDate = currentDate.toISOString().split('T')[0].slice(0, 7); // Get YYYY-MM format
-	$('#monthFilter').val(formattedDate);
+	// Hide month and custom date range inputs
+	$('#monthFilter, #customDateRange').hide();
 }
 
 // Get the selected month from the input field
@@ -237,101 +657,187 @@ function getSelectedMonth() {
 
 // Load transmittal data with caching, and apply status and month filtering
 function loadTransmittalData(storeName, filterCriteria = null) {
-    const cacheExpiration = 5 * 60 * 1000; // Cache expiration: 5 minutes
-    const currentTime = new Date();
+	const cacheExpiration = 5 * 60 * 1000; // Cache expiration: 5 minutes
+	const currentTime = new Date();
 
-    // Show loading dialog immediately
-    showLoadingDialog("Loading transmittal data...");
+	// Show loading dialog immediately
+	showLoadingDialog("Loading transmittal data...");
 
-    if (transmittalDataCache && lastTransmittalFetchedTime && (currentTime - lastTransmittalFetchedTime < cacheExpiration)) {
-        console.log('Using cached transmittal data:', transmittalDataCache);
-        
-        // Use timeout to ensure UI responsiveness
-        setTimeout(() => {
-            filterData(transmittalDataCache, filterCriteria); // Filter by month or status
-            
-            // Close loading dialog
-            hideLoadingDialog();
-            
-        }, 100);
-    } else {
-        console.log('Fetching fresh transmittal data.');
-        fetchAndUpdateDataTable(storeName, filterCriteria);
-    }
+	// If isStoreSpecificView is true, always fetch fresh data
+	if (isStoreSpecificView) {
+		console.log('Fetching fresh transmittal data (store-specific view).');
+		fetchAndUpdateDataTable(storeName, filterCriteria); // Use storeName directly
+	} else if (transmittalDataCache && lastTransmittalFetchedTime && (currentTime - lastTransmittalFetchedTime < cacheExpiration)) {
+		console.log('Using cached transmittal data:', transmittalDataCache);
+
+		// Use timeout to ensure UI responsiveness
+		setTimeout(() => {
+			filterData(transmittalDataCache, filterCriteria); // Filter by month or status
+
+			// Close loading dialog
+			hideLoadingDialog();
+
+		}, 100);
+	} else {
+		console.log('Fetching fresh transmittal data.');
+		fetchAndUpdateDataTable(storeName, filterCriteria); // Use storeName directly
+	}
 }
 
 // Fetch fresh transmittal data from the server and apply month and status filtering
 function fetchAndUpdateDataTable(storeName, filterCriteria = null) {
-    showLoadingDialog("Updating data...");
+	showLoadingDialog("Updating data...");
 
-    google.script.run.withSuccessHandler(response => {
-        try {
-            const data = JSON.parse(response);
-            if (Array.isArray(data)) {
-                transmittalDataCache = data;
-                lastTransmittalFetchedTime = new Date();
-                
-                // Use a timeout to ensure UI is updated before closing the dialog
-                setTimeout(() => {
-                    filterData(data, filterCriteria);
-                    
-                    // Close the loading dialog
-                    hideLoadingDialog();
-                    
-                    // Show success toast after data is loaded
-                    showToast('success', 'Transmittal data loaded successfully');
-                }, 100);
-            } else {
-                // Handle case where parsed data is not an array
-                hideLoadingDialog();
-                showToast('warning', 'No transmittal data found');
-            }
-        } catch (e) {
-            console.error("Error parsing response JSON:", e);
-            hideLoadingDialog();
-            showToast('error', 'Failed to parse transmittal data');
-        }
-    }).withFailureHandler(error => {
-        console.error("Error fetching data:", error);
-        hideLoadingDialog();
-        showToast('error', `Failed to fetch transmittal data: ${error.message}`);
-    }).getStoreTransmittalData(storeName);
+	google.script.run.withSuccessHandler(response => {
+		try {
+			const data = JSON.parse(response);
+			if (Array.isArray(data)) {
+				transmittalDataCache = data;
+				lastTransmittalFetchedTime = new Date();
+
+				// Use a timeout to ensure UI is updated before closing the dialog
+				setTimeout(() => {
+					filterData(data, filterCriteria);
+
+					// Close the loading dialog
+					hideLoadingDialog();
+
+					// Show success toast after data is loaded
+					showToast('success', 'Transmittal data loaded successfully');
+				}, 100);
+			} else {
+				// Handle case where parsed data is not an array
+				hideLoadingDialog();
+				showToast('warning', 'No transmittal data found');
+			}
+		} catch (e) {
+			console.error("Error parsing response JSON:", e);
+			hideLoadingDialog();
+			showToast('error', 'Failed to parse transmittal data');
+		}
+	}).withFailureHandler(error => {
+		console.error("Error fetching data:", error);
+		hideLoadingDialog();
+		showToast('error', `Failed to fetch transmittal data: ${error.message}`);
+	}).getStoreTransmittalData(storeName);
 }
 
-// Filter data by month and/or status, using "Transmitted Date" as the reference
+// Enhanced filter data function to handle multiple filter types
 function filterData(data, filterCriteria = null) {
-    let filteredData = data;
+	let filteredData = data;
 
-    // Filtering by month
-    if (typeof filterCriteria === 'string' && filterCriteria.includes('-')) {
-        console.log('Filtering data by selected month:', filterCriteria);
-        const [filterYear, filterMonth] = filterCriteria.split('-').map(Number);
-        filteredData = filteredData.filter(item => {
-            const transmittedDate = new Date(item.Transmitted);
-            return transmittedDate.getFullYear() === filterYear && transmittedDate.getMonth() + 1 === filterMonth;
-        });
-    }
+	// Filtering logic based on different criteria types
+	if (filterCriteria) {
+		if (typeof filterCriteria === 'string') {
+			// Monthly filter
+			if (filterCriteria.includes('-')) {
+				console.log('Filtering data by selected month:', filterCriteria);
+				const [filterYear, filterMonth] = filterCriteria.split('-').map(Number);
+				filteredData = filteredData.filter(item => {
+					// Use Transmitted column for date filtering
+					const transmittedDate = parseDateFlexibly(item.Transmitted);
+					return transmittedDate &&
+						transmittedDate.getFullYear() === filterYear &&
+						transmittedDate.getMonth() + 1 === filterMonth;
+				});
+			}
+			// Today's filter
+			else if (filterCriteria === 'today') {
+				const today = new Date().toLocaleDateString();
+				filteredData = filteredData.filter(item => {
+					// Use Transmitted column for date comparison
+					const transmittedDate = parseDateFlexibly(item.Transmitted);
+					return transmittedDate &&
+						transmittedDate.toLocaleDateString() === today;
+				});
+			}
+			// Weekly filter
+			else if (filterCriteria === 'weekly') {
+				const today = new Date();
+				const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay()));
+				const endOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 6));
 
-    console.log('Filtered data:', filteredData);
-    
-    // Update DataTable
-    updateDataTable(filteredData);
-    
-    // Add toast for no data
-    if (filteredData.length === 0) {
-        showToast('warning', 'No data found for the selected criteria');
-    }
+				filteredData = filteredData.filter(item => {
+					// Use Transmitted column for date comparison
+					const transmittedDate = parseDateFlexibly(item.Transmitted);
+					return transmittedDate &&
+						transmittedDate >= startOfWeek &&
+						transmittedDate <= endOfWeek;
+				});
+			}
+		}
+		// Custom date range filter
+		else if (filterCriteria.start && filterCriteria.end) {
+			const startDate = new Date(filterCriteria.start);
+			const endDate = new Date(filterCriteria.end);
+
+			// Adjust dates to handle full day inclusivity
+			startDate.setHours(0, 0, 0, 0); // Start of the day
+			endDate.setHours(23, 59, 59, 999); // End of the day
+
+			filteredData = filteredData.filter(item => {
+				// Exclusively use Transmitted column for date filtering
+				const transmittedDate = parseDateFlexibly(item.Transmitted);
+
+				// Ensure transmittedDate is valid before comparison
+				return transmittedDate &&
+					transmittedDate >= startDate &&
+					transmittedDate <= endDate;
+			});
+		}
+	}
+
+	console.log('Filtered data:', filteredData);
+
+	// Update DataTable
+	updateDataTable(filteredData);
+
+	// Add toast for no data
+	if (filteredData.length === 0) {
+		showToast('warning', 'No data found for the selected criteria');
+	}
 }
 
 // Update DataTable based on the filtered data
 function updateDataTable(data) {
-	const dataTable = $('#storeTransmittalTable').DataTable();
-	dataTable.clear();
-	if (data.length > 0) {
-		dataTable.rows.add(data).draw();
-	} else {
-		dataTable.draw(); // Just redraw the table if no data is available
-	}
+  const dataTable = $('#storeTransmittalTable').DataTable();
+  dataTable.clear();
+  
+  if (data.length > 0) {
+    dataTable.rows.add(data).draw();
+    enhanceRowHighlighting(); // Add row highlighting
+  } else {
+    dataTable.draw(); // Just redraw the table if no data is available
+  }
+}
+
+// Enhance row highlighting for rows with remarks
+function enhanceRowHighlighting() {
+  const dataTable = $('#storeTransmittalTable').DataTable();
+  
+  dataTable.rows().every(function() {
+    const rowData = this.data();
+    const $row = $(this.node());
+
+    // Add subtle highlight for rows with remarks
+    if (rowData.Remarks && rowData.Remarks.trim() !== '') {
+      $row.addClass('bg-yellow-50 hover:bg-yellow-100');
+    }
+
+    // Optional: Add highlighting for different statuses
+    const status = rowData.Status ? rowData.Status.toLowerCase() : '';
+    switch(status) {
+      case 'pending':
+        $row.addClass('bg-yellow-50 hover:bg-yellow-100');
+        break;
+      case 'received':
+        $row.addClass('bg-green-50 hover:bg-green-100');
+        break;
+      case 'not received':
+        $row.addClass('bg-red-50 hover:bg-red-100');
+        break;
+    }
+  });
 }
 
 // Toggle Add Data button and Actions column visibility based on status
@@ -364,78 +870,436 @@ function initializeDataTable() {
 	initializeSearchHandler(dataTable);
 }
 
-// Define columns for the DataTable
 function getColumns() {
-	return [{
-			title: 'ID',
-			data: 'ID',
-			visible: false
-		},
-		{
-			title: 'DR Date',
-			data: 'Date',
-			render: formatDate
-		},
-		{
-			title: 'Vendor',
-			data: 'Vendor'
-		},
-		{
-			title: 'DR Number',
-			data: 'DR Number'
-		},
-		{
-			title: 'Type',
-			data: 'Type'
-		},
-		{
-			title: 'Amount',
-			data: 'Amount',
-			render: formatAmount
-		},
-		{
-			title: 'Status',
-			data: 'Status',
-			render: formatStatus,
-			visible: true
-		}, // Visible status
-		{
-			title: 'Transmitted',
-			data: 'Transmitted',
-			render: formatDate,
-			visible: false
-		}, // Hidden column
-		{
-			title: 'Received',
-			data: 'Received',
-			render: formatDate,
-			visible: false
-		}, // Hidden column
-		{
-			title: 'Late',
-			data: 'Late',
-			visible: false
-		}, // Hidden column
-		{
-			title: 'Remarks',
-			data: 'Remarks',
-			visible: false
-		}, // Hidden column
-		{
-			title: 'Actions',
-			data: null,
-			render: actionButtons,
-			orderable: false
-		}
-	];
+    return [
+        {
+            title: '#',
+            data: null,
+            render: function(data, type, row, meta) {
+                return `
+                    <div class="flex items-center justify-center space-x-2">
+                        <span class="text-gray-600 font-semibold bg-gray-100 px-2 py-1 rounded-full text-xs">
+                            ${meta.row + 1}
+                        </span>
+                        <button class="view-details-btn 
+                            text-blue-500 hover:text-blue-700 
+                            transition-colors duration-200 
+                            hover:bg-blue-50 
+                            p-1 rounded-full" 
+                            data-row-index="${meta.row}" 
+                            title="View Details">
+                            <i class="fas fa-eye text-lg"></i>
+                        </button>
+                    </div>
+                `;
+            },
+            width: '80px',
+            className: 'text-center'
+        },
+        {
+            title: 'ID',
+            data: 'ID',
+            visible: false
+        },
+        {
+            title: 'DR Date',
+            data: 'Date',
+            render: function(data, type, row) {
+                if (!data) return '<span class="text-gray-400 italic">No Date</span>';
+                
+                const formattedDate = formatDate(data);
+                const dateObj = new Date(data);
+                const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                
+                return `
+                    <div class="flex items-center">
+                        <i class="fas fa-calendar-alt text-blue-500 mr-2"></i>
+                        <span class="font-medium text-gray-700">
+                            ${formattedDate}
+                            <small class="text-gray-500 block text-xs">${dayOfWeek}</small>
+                        </span>
+                    </div>
+                `;
+            },
+            className: 'text-left'
+        },
+        {
+            title: 'Vendor',
+            data: 'Vendor',
+            render: function(data, type, row) {
+                if (!data) return '<span class="text-gray-400 italic">Unspecified</span>';
+                
+                const truncatedVendor = data.length > 20 ? data.substring(0, 20) + '...' : data;
+                return `
+                    <div class="flex items-center">
+                        <i class="fas fa-building text-green-500 mr-2"></i>
+                        <span class="font-medium text-gray-700" title="${data}">
+                            ${truncatedVendor}
+                        </span>
+                    </div>
+                `;
+            },
+            className: 'text-left'
+        },
+        {
+            title: 'DR Number',
+            data: 'DR Number',
+            render: function(data) {
+                if (!data) return '<span class="text-gray-400 italic">No DR</span>';
+                
+                return `
+                    <div class="flex items-center">
+                        <i class="fas fa-barcode text-purple-500 mr-2"></i>
+                        <span class="font-medium text-gray-700">${data}</span>
+                    </div>
+                `;
+            },
+            className: 'text-left'
+        },
+        {
+            title: 'Type',
+            data: 'Type',
+            render: function(data) {
+                if (!data) return '<span class="text-gray-400 italic">Unspecified</span>';
+                
+                return `
+                    <div class="flex items-center">
+                        <i class="fas fa-tags text-indigo-500 mr-2"></i>
+                        <span class="font-medium text-gray-700">${data}</span>
+                    </div>
+                `;
+            },
+            className: 'text-left'
+        },
+        {
+            title: 'Amount',
+            data: 'Amount',
+            render: function(data) {
+                if (isNaN(data) || data === null) {
+                    return '<span class="text-gray-400 italic">₱ 0.00</span>';
+                }
+                
+                const formattedAmount = formatAmount(data);
+                const amountColor = parseFloat(data) > 0 ? 'text-green-600' : 'text-gray-500';
+                
+                return `
+                    <div class="flex items-center justify-end">
+                        <span class="font-bold ${amountColor}">₱ ${formattedAmount}</span>
+                    </div>
+                `;
+            },
+            className: 'text-right'
+        },
+        {
+            title: 'Status',
+            data: 'Status',
+            render: formatStatus,
+            className: 'text-center'
+        },
+        {
+            title: 'Transmitted',
+            data: 'Transmitted',
+            render: formatDate,
+            visible: false
+        },
+        {
+            title: 'Received',
+            data: 'Received',
+            render: formatDate,
+            visible: false
+        },
+        {
+            title: 'Late',
+            data: 'Late',
+            visible: false
+        },
+        {
+            title: 'Remarks',
+            data: 'Remarks',
+            render: function(data) {
+                const hasRemarks = data && data.trim() !== '';
+                
+                if (hasRemarks) {
+                    return `
+                        <div class="flex items-center cursor-pointer 
+                            hover:bg-yellow-50 p-1 rounded-lg 
+                            transition-colors duration-200"
+                            onclick="viewRemarks('${escapeHtml(data)}')">
+                            <i class="fas fa-comment-dots text-yellow-600 mr-2 text-lg"></i>
+                            <span class="text-gray-700 font-medium">
+                                View Remarks
+                                <small class="block text-xs text-yellow-700">
+                                    ${data.length} characters
+                                </small>
+                            </span>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="flex items-center text-gray-400">
+                            <i class="fas fa-comment-slash mr-2 text-lg"></i>
+                            <span class="italic"></span>
+                        </div>
+                    `;
+                }
+            },
+            className: 'text-left'
+        },
+        {
+            title: 'Actions',
+            data: null,
+            render: function(data, type, row, meta) {
+                return `
+                    <div class="flex justify-center items-center space-x-2">
+                        <button class="edit-btn 
+                            text-blue-500 hover:text-blue-700 
+                            bg-blue-50 hover:bg-blue-100 
+                            p-2 rounded-full 
+                            transition-all duration-200" 
+                            data-row-index="${meta.row}" 
+                            title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="delete-btn 
+                            text-red-500 hover:text-red-700 
+                            bg-red-50 hover:bg-red-100 
+                            p-2 rounded-full 
+                            transition-all duration-200" 
+                            data-row-index="${meta.row}" 
+                            title="Delete">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                `;
+            },
+            orderable: false,
+            className: 'text-center',
+            width: '100px'
+        }
+    ];
 }
 
-// Search input handler
+// Enhanced view remarks function with modern styling
+function viewRemarks(remarks) {
+    // Check if remarks exist and are not just whitespace
+    if (remarks && remarks.trim() !== '') {
+        Swal.fire({
+            title: '<span class="text-2xl font-bold text-gray-800">Detailed Remarks</span>',
+            html: `
+                <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg text-left">
+                    <div class="flex items-center mb-3">
+                        <i class="fas fa-comment-dots text-yellow-600 mr-3 text-2xl"></i>
+                        <h3 class="text-lg font-semibold text-gray-700">Remarks</h3>
+                    </div>
+                    <pre class="whitespace-pre-wrap text-gray-800 font-sans text-left 
+                        bg-white border border-yellow-200 rounded p-3 
+                        max-h-[300px] overflow-auto">${escapeHtml(remarks)}</pre>
+                    <div class="mt-3 text-sm text-gray-500 italic">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        Remarks added on ${new Date().toLocaleString()}
+                    </div>
+                </div>
+            `,
+            icon: 'info',
+            confirmButtonText: 'Close',
+            confirmButtonColor: '#3B82F6', // Tailwind blue-500
+            customClass: {
+                popup: 'rounded-xl shadow-2xl',
+                content: 'p-0'
+            },
+            showClass: {
+                popup: 'animate__animated animate__fadeInUp'
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutDown'
+            }
+        });
+    } else {
+        Swal.fire({
+            title: 'No Remarks',
+            html: `
+                <div class="flex flex-col items-center">
+                    <i class="fas fa-comment-slash text-gray-400 text-6xl mb-4"></i>
+                    <p class="text-gray-600">There are no remarks for this entry.</p>
+                </div>
+            `,
+            icon: 'info',
+            confirmButtonText: 'Understood',
+            confirmButtonColor: '#6B7280' // Tailwind gray-500
+        });
+    }
+}
+
+// Enhanced row details modal with modern, informative design
+function setupRowDetailsModal() {
+    $(document).on('click', '.view-details-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const dataTable = $('#storeTransmittalTable').DataTable();
+        const rowIndex = $(this).data('row-index');
+        const rowData = dataTable.row(rowIndex).data();
+
+        if (!rowData) {
+            console.error('No row data found');
+            return;
+        }
+
+        Swal.fire({
+            title: '<span class="text-2xl font-bold text-gray-800">Transmittal Details</span>',
+            html: createDetailedRowView(rowData),
+            width: '800px',
+            showCloseButton: true,
+            showConfirmButton: false,
+            customClass: {
+                popup: 'rounded-xl shadow-2xl p-6',
+                title: 'text-center mb-4'
+            },
+            background: '#f8fafc', // Light background
+            showClass: {
+                popup: 'animate__animated animate__fadeInUp'
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutDown'
+            }
+        });
+    });
+}
+
+// Create a detailed HTML view for the row with enhanced design
+function createDetailedRowView(rowData) {
+    // Define fields to display with more robust handling and styling
+    const detailFields = [
+        { 
+            label: 'ID', 
+            value: rowData.ID || 'N/A',
+            icon: 'fas fa-fingerprint'
+        },
+        { 
+            label: 'DR Date', 
+            value: rowData.Date ? formatDate(rowData.Date) : 'N/A',
+            icon: 'fas fa-calendar-alt'
+        },
+        { 
+            label: 'DR Number', 
+            value: rowData['DR Number'] || 'N/A',
+            icon: 'fas fa-barcode'
+        },
+        { 
+            label: 'Vendor', 
+            value: rowData.Vendor || 'N/A',
+            icon: 'fas fa-building'
+        },
+        { 
+            label: 'Type', 
+            value: rowData.Type || 'Unspecified',
+            icon: 'fas fa-tags'
+        },
+        { 
+            label: 'Amount', 
+            value: formatAmount(rowData.Amount),
+            icon: 'fas fa-dollar-sign'
+        },
+        { 
+            label: 'Status', 
+            value: rowData.Status || 'N/A',
+            icon: 'fas fa-info-circle'
+        },
+        { 
+            label: 'Transmitted', 
+            value: rowData.Transmitted ? formatDate(rowData.Transmitted) : 'N/A',
+            icon: 'fas fa-paper-plane'
+        },
+        { 
+            label: 'Received', 
+            value: rowData.Received ? formatDate(rowData.Received) : 'N/A',
+            icon: 'fas fa-check-circle'
+        },
+        { 
+            label: 'Late', 
+            value: rowData.Late || 'No',
+            icon: 'fas fa-clock'
+        }
+    ];
+
+    // Create HTML for detailed view with enhanced design
+    let detailsHtml = `
+        <div class="grid grid-cols-2 gap-4">
+            ${detailFields.map(field => `
+                <div class="flex items-center bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+                    <div class="mr-4 text-gray-500">
+                        <i class="${field.icon} text-2xl"></i>
+                    </div>
+                    <div>
+                        <span class="text-gray-600 font-semibold block text-sm">${escapeHtml(field.label)}</span>
+                        <span class="text-gray-900 font-medium">${escapeHtml(field.value)}</span>
+                    </div>
+                </div>
+            `).join('')}
+            
+            ${rowData.Remarks ? `
+                <div class="col-span-2 mt-4">
+                    <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg">
+                        <div class="flex items-center mb-3">
+                            <i class="fas fa-comment-dots text-yellow-600 mr-3 text-xl"></i>
+                            <span class="text-gray-600 font-semibold">Remarks</span>
+                        </div>
+                        <pre class="whitespace-pre-wrap text-gray-800 
+                            bg-white border border-yellow-200 
+                            rounded p-3 max-h-[200px] overflow-auto">${escapeHtml(rowData.Remarks)}</pre>
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+
+    return detailsHtml;
+}
+
+// Utility function to escape HTML to prevent XSS
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') {
+        return String(unsafe);
+    }
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+         
+// Enhanced search handler
 function initializeSearchHandler(dataTable) {
-	$('#searchInput').on('keyup', function() {
-		const searchTerm = $(this).val();
-		dataTable.search(searchTerm).draw(); // Search and redraw table on each keyup event
-	});
+  $('#searchInput').on('keyup', function() {
+    const searchTerm = $(this).val().toLowerCase();
+    
+    // Custom search across multiple columns
+    dataTable.rows().every(function() {
+      const rowData = this.data();
+      const match = Object.values(rowData).some(value => 
+        String(value).toLowerCase().includes(searchTerm)
+      );
+      
+      // Toggle row visibility based on search
+      $(this.node()).toggle(match);
+    });
+    
+    // Redraw the table to update pagination and styling
+    dataTable.draw('page');
+    
+    // Update results count
+    updateSearchResultsCount(dataTable);
+  });
+}
+
+// Function to update search results count
+function updateSearchResultsCount(dataTable) {
+  const visibleRowCount = dataTable.rows(':visible').count();
+  const totalRowCount = dataTable.rows().count();
+  
+  // Optional: Display search results information
+  $('#searchResultsInfo').text(`Showing ${visibleRowCount} of ${totalRowCount} entries`);
 }
 
 // Set up event handlers for edit and delete actions
@@ -446,108 +1310,96 @@ function setupEventHandlers() {
 
 // Setup the add and edit data modals
 function setupModals() {
-	// Setup for Add Data Modal
-	$('#addDataModal').on('shown.bs.modal', function() {
-		$('#store').val(storeName);
-		$('#transmitted').val(new Date().toISOString().split('T')[0]);
-		resetAddModal(); // Reset the form fields
-		setupAmountInput('#amount'); // Assuming this is the ID for the amount input in the Add Modal
-	});
+    // Setup for Add Data Modal
+    $('#openAddModalButton').on('click', function() {
+        $('#addDataModal').modal('show');
+    });
 
-	// Setup for Edit Data Modal
-	$('#editDataModal').on('shown.bs.modal', function() {
-		setupAmountInput('#editAmount'); // Assuming this is the ID for the amount input in the Edit Modal
-	});
+    $('#addDataModal').on('shown.bs.modal', function() {
+        // Ensure the modal is accessible based on user type
+        if (userType === 'USER' || userType === 'Administrator') {
+            $('#store').val(storeName);
+            $('#transmitted').val(new Date().toISOString().split('T')[0]);
+            resetAddModal();
+            setupAmountInput('#amount');
+        }
+    });
 
-	// Handle form submission for adding new data
-	$('#addDataForm').off('submit').on('submit', handleAddData);
+    // Handle form submission for adding new data
+    $('#addDataForm').off('submit').on('submit', function(e) {
+        // Additional check to ensure user has permission
+        if (userType === 'USER' || userType === 'Administrator') {
+            handleAddData(e);
+        } else {
+            e.preventDefault();
+            showToast('error', 'You do not have permission to add data');
+        }
+    });
 
-	// Handle form submission for editing data
-	$('#editDataForm').off('submit').on('submit', handleEditData);
-
-	// Fetch vendor options and populate the dropdown
-	google.script.run.withSuccessHandler(populateVendorDropdown).getVendorOptions();
-}
-
-// Function to setup amount input formatting and restriction
-function setupAmountInput(selector) {
-	$(selector)
-		.off('input') // Clear previous input event
-		.on('input', function() {
-			// Allow only numbers and a single decimal point
-			const value = $(this).val().replace(/[^0-9.]/g, '');
-
-			// Ensure only one decimal point is allowed
-			const decimalCount = (value.match(/\./g) || []).length;
-			if (decimalCount > 1) {
-				const lastDotIndex = value.lastIndexOf('.');
-				$(this).val(value.substring(0, lastDotIndex + 1) + value.substring(lastDotIndex + 1).replace(/\./g, ''));
-			} else {
-				$(this).val(value);
-			}
-		})
-		.off('blur') // Clear previous blur event
-		.on('blur', function() {
-			const inputField = $(this);
-			const rawValue = inputField.val().replace(/[^0-9.]/g, '');
-			const parsedValue = parseFloat(rawValue);
-			if (!isNaN(parsedValue)) {
-				const formattedValue = formatToCurrency(parsedValue);
-				inputField.val(formattedValue);
-			} else {
-				inputField.val(''); // Clear the field if invalid
-			}
-		});
-}
-
-// Function to format numbers to accounting format with 2 decimal points
-function formatToCurrency(value) {
-	return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    // Fetch vendor options and populate the dropdown
+    google.script.run.withSuccessHandler(populateVendorDropdown).getVendorOptions();
 }
 
 // Populate vendor dropdowns in the modals
 function populateVendorDropdown(data) {
-	const vendorDropdown = document.getElementById('vendor');
-	const editVendorDropdown = document.getElementById('editVendor');
+    const vendorDropdown = $('#vendor');
+    const editVendorDropdown = $('#editVendor');
 
-	// Clear existing options
-	vendorDropdown.innerHTML = '';
-	editVendorDropdown.innerHTML = '';
+    // Clear existing options
+    vendorDropdown.empty();
+    editVendorDropdown.empty();
 
-	// Add a default "Select Vendor" option
-	const defaultOption = createDropdownOption('', 'Select Vendor', true);
-	vendorDropdown.appendChild(defaultOption.cloneNode(true));
-	editVendorDropdown.appendChild(defaultOption.cloneNode(true));
+    // Add a default "Select Vendor" option
+    const defaultOption = $('<option>', {
+        value: '',
+        text: 'Select Vendor',
+        selected: true,
+        disabled: true
+    });
+    
+    vendorDropdown.append(defaultOption.clone());
+    editVendorDropdown.append(defaultOption.clone());
 
-	// Populate the vendor dropdowns
-	if (Array.isArray(data.vendors) && data.vendors.length > 0) {
-		data.vendors.forEach(vendor => {
-			const option = createDropdownOption(vendor, vendor);
-			vendorDropdown.appendChild(option.cloneNode(true)); // Add to Add Modal
-			editVendorDropdown.appendChild(option.cloneNode(true)); // Add to Edit Modal
-		});
-	}
+    // Populate the vendor dropdowns
+    if (Array.isArray(data.vendors) && data.vendors.length > 0) {
+        data.vendors.forEach(vendor => {
+            const option = $('<option>', {
+                value: vendor,
+                text: vendor
+            });
+            
+            vendorDropdown.append(option.clone());
+            editVendorDropdown.append(option.clone());
+        });
+    }
 
-	// Update type field based on selected vendor in the "Add" modal
-	vendorDropdown.addEventListener('change', () => {
-		const typeInput = document.getElementById('type');
-		typeInput.value = data.vendorTypeMap[vendorDropdown.value] || ''; // Set vendor type
-	});
+    // Update type field based on selected vendor in the "Add" modal
+    vendorDropdown.off('change').on('change', function() {
+        const selectedVendor = $(this).val();
+        const typeInput = $('#type');
+        typeInput.val(data.vendorTypeMap[selectedVendor] || '');
+    });
 
-	// Update type field based on selected vendor in the "Edit" modal
-	editVendorDropdown.addEventListener('change', () => {
-		const typeEditInput = document.getElementById('editType');
-		typeEditInput.value = data.vendorTypeMap[editVendorDropdown.value] || ''; // Set vendor type
-	});
+    // Update type field based on selected vendor in the "Edit" modal
+    editVendorDropdown.off('change').on('change', function() {
+        const selectedVendor = $(this).val();
+        const typeEditInput = $('#editType');
+        typeEditInput.val(data.vendorTypeMap[selectedVendor] || '');
+    });
 }
 
-// Create dropdown option element
-function createDropdownOption(value, text, disabled = false) {
-	const option = document.createElement('option');
-	option.value = value;
-	option.text = text;
-	option.disabled = disabled;
-	return option;
+// Optional: Helper function if you want to keep the original createDropdownOption approach
+function createDropdownOption(value, text, isDefault = false) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.text = text;
+    
+    if (isDefault) {
+        option.selected = true;
+        option.disabled = true;
+    }
+    
+    return option;
 }
 
 // Handle adding new transmittal data
@@ -566,33 +1418,33 @@ function handleEditData(event) {
 
 // Submit transmittal data for add/edit
 function submitTransmittalData(formData, action) {
-    const dataObject = Object.fromEntries(formData.entries());
-    const formSelector = action === 'add' ? '#addDataForm' : '#editDataForm';
-    const submitButton = setSubmitButtonState(`${formSelector} button[type="submit"]`, true, action === 'add' ? 'Submitting...' : 'Updating...');
+	const dataObject = Object.fromEntries(formData.entries());
+	const formSelector = action === 'add' ? '#addDataForm' : '#editDataForm';
+	const submitButton = setSubmitButtonState(`${formSelector} button[type="submit"]`, true, action === 'add' ? 'Submitting...' : 'Updating...');
 
-    const successMessage = action === 'add' ? 'Successfully added!' : 'Successfully updated!';
-    const apiCall = action === 'add' ? 'addData' : 'updateData';
+	const successMessage = action === 'add' ? 'Successfully added!' : 'Successfully updated!';
+	const apiCall = action === 'add' ? 'addData' : 'updateData';
 
-    google.script.run.withSuccessHandler(function(response) {
-        Swal.fire({
-            icon: 'success',
-            title: successMessage,
-            text: response
-        }).then(() => {
-            resetForm(formSelector);
-            invalidateCaches(); // Invalidate caches
-            loadTransmittalData(storeName, getSelectedMonth());
-            fetchDashboardData(); // Fetch updated dashboard data
-            resetSubmitButton(submitButton);
-            
-            // Add more specific toast
-            showToast('success', `Transmittal ${action === 'add' ? 'added' : 'updated'} for ${dataObject.vendor || 'vendor'}`);
-        });
-    }).withFailureHandler(error => {
-        // Add error toast
-        showToast('error', `Failed to ${action} transmittal: ${error.message}`);
-        resetSubmitButton(submitButton);
-    })[apiCall](dataObject);
+	google.script.run.withSuccessHandler(function(response) {
+		Swal.fire({
+			icon: 'success',
+			title: successMessage,
+			text: response
+		}).then(() => {
+			resetForm(formSelector);
+			invalidateCaches(); // Invalidate caches
+			loadTransmittalData(storeName, getSelectedMonth());
+			fetchDashboardData(); // Fetch updated dashboard data
+			resetSubmitButton(submitButton);
+
+			// Add more specific toast
+			showToast('success', `Transmittal ${action === 'add' ? 'added' : 'updated'} for ${dataObject.vendor || 'vendor'}`);
+		});
+	}).withFailureHandler(error => {
+		// Add error toast
+		showToast('error', `Failed to ${action} transmittal: ${error.message}`);
+		resetSubmitButton(submitButton);
+	})[apiCall](dataObject);
 }
 
 // Handle edit button click
@@ -607,37 +1459,37 @@ function handleEdit() {
 
 // Handle delete button click with confirmation
 function handleDelete() {
-    const rowIndex = $(this).data('row-index');
-    const rowData = $('#storeTransmittalTable').DataTable().row(rowIndex).data();
+	const rowIndex = $(this).data('row-index');
+	const rowData = $('#storeTransmittalTable').DataTable().row(rowIndex).data();
 
-    Swal.fire({
-        title: 'Are you sure?',
-        text: "This action is irreversible!",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel',
-    }).then((result) => {
-        if (result.isConfirmed) {
-            google.script.run.withSuccessHandler(function(response) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Deleted!',
-                    text: response
-                }).then(() => {
-                    invalidateCaches(); // Invalidate caches
-                    loadTransmittalData(storeName, getSelectedMonth());
-                    fetchDashboardData(); // Fetch updated dashboard data
-                    
-                    // Add delete toast
-                    showToast('success', `Transmittal for ${rowData.Vendor} deleted`);
-                });
-            }).withFailureHandler(error => {
-                // Add error toast for delete failure
-                showToast('error', `Failed to delete transmittal: ${error.message}`);
-            }).deleteData(rowData.ID, storeName);
-        }
-    });
+	Swal.fire({
+		title: 'Are you sure?',
+		text: "This action is irreversible!",
+		icon: 'warning',
+		showCancelButton: true,
+		confirmButtonText: 'Yes, delete it!',
+		cancelButtonText: 'Cancel',
+	}).then((result) => {
+		if (result.isConfirmed) {
+			google.script.run.withSuccessHandler(function(response) {
+				Swal.fire({
+					icon: 'success',
+					title: 'Deleted!',
+					text: response
+				}).then(() => {
+					invalidateCaches(); // Invalidate caches
+					loadTransmittalData(storeName, getSelectedMonth());
+					fetchDashboardData(); // Fetch updated dashboard data
+
+					// Add delete toast
+					showToast('success', `Transmittal for ${rowData.Vendor} deleted`);
+				});
+			}).withFailureHandler(error => {
+				// Add error toast for delete failure
+				showToast('error', `Failed to delete transmittal: ${error.message}`);
+			}).deleteData(rowData.ID, storeName);
+		}
+	});
 }
 
 // Invalidate cache after data operations
@@ -648,15 +1500,14 @@ function invalidateCaches() {
 	lastFetchedTime = null; // Reset last fetched time
 }
 
-// Show loading dialog
 function showLoadingDialog(message) {
-	Swal.fire({
-		title: 'Loading',
-		text: message,
-		allowOutsideClick: false,
-		willOpen: () => Swal.showLoading(),
-		showConfirmButton: false
-	});
+    return Swal.fire({
+        title: 'Loading',
+        text: message,
+        allowOutsideClick: false,
+        willOpen: () => Swal.showLoading(),
+        showConfirmButton: false
+    });
 }
 
 // Hide loading dialog
@@ -676,7 +1527,74 @@ function formatAmount(data) {
 }
 
 function formatStatus(data) {
-	return data ? data.charAt(0).toUpperCase() + data.slice(1).toLowerCase() : '';
+	if (!data) return '';
+
+	// Normalize the status
+	const normalizedStatus = data.trim().toLowerCase().replace(/\s+/g, '-');
+
+	// Define an enhanced status color and styling mapping
+	const statusStyles = {
+		// Pending States
+		'pending': {
+			text: 'Pending',
+			colorClass: 'bg-yellow-100 text-yellow-800',
+			icon: 'fas fa-clock'
+		},
+		'processing': {
+			text: 'Processing',
+			colorClass: 'bg-blue-100 text-blue-800',
+			icon: 'fas fa-spinner'
+		},
+
+		// Received States
+		'received': {
+			text: 'Received',
+			colorClass: 'bg-green-100 text-green-800',
+			icon: 'fas fa-check-circle'
+		},
+		'partially-received': {
+			text: 'Partially Received',
+			colorClass: 'bg-orange-100 text-orange-800',
+			icon: 'fas fa-adjust'
+		},
+
+		// Not Received States
+		'not-received': {
+			text: 'Not Received',
+			colorClass: 'bg-red-100 text-red-800',
+			icon: 'fas fa-times-circle'
+		},
+		'delayed': {
+			text: 'Delayed',
+			colorClass: 'bg-red-200 text-red-900',
+			icon: 'fas fa-exclamation-triangle'
+		},
+
+		// Completed States
+		'completed': {
+			text: 'Completed',
+			colorClass: 'bg-green-200 text-green-900',
+			icon: 'fas fa-check-double'
+		},
+
+		// Default Fallback
+		'default': {
+			text: data.charAt(0).toUpperCase() + data.slice(1).toLowerCase(),
+			colorClass: 'bg-gray-100 text-gray-800',
+			icon: 'fas fa-info-circle'
+		}
+	};
+
+	// Select the appropriate status style, fallback to default if not found
+	const statusStyle = statusStyles[normalizedStatus] || statusStyles['default'];
+
+	// Create a more comprehensive status badge with icon
+	return `
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle.colorClass}">
+            <i class="${statusStyle.icon} mr-1.5"></i>
+            ${statusStyle.text}
+        </span>
+    `;
 }
 
 function actionButtons(data, type, row, meta) {
@@ -690,30 +1608,19 @@ function actionButtons(data, type, row, meta) {
     `;
 }
 
-// Reset form fields and hide modal
-function resetForm(selector) {
-	$(selector)[0].reset(); // Reset the form fields
-	$(selector).closest('.modal').modal('hide'); // Hide the modal
-}
-
 // Reset the add modal fields
 function resetAddModal() {
-	$('#vendor').val(''); // Reset vendor dropdown
-	$('#type').val(''); // Reset type field
-}
-
-// Set submit button state (disabled/enabled)
-function setSubmitButtonState(selector, isDisabled, text) {
-	const button = document.querySelector(selector);
-	button.disabled = isDisabled;
-	button.innerHTML = isDisabled ? `<span class="spinner-border spinner-border-sm" role="status"></span> ${text}` : 'Submit';
-	return button;
-}
-
-// Reset the submit button state
-function resetSubmitButton(button) {
-	button.disabled = false;
-	button.innerHTML = 'Submit';
+    // Reset form fields
+    $('#addDataForm')[0].reset(); // Reset all form fields
+    
+    // Set default values
+    $('#store').val(storeName);
+    $('#transmitted').val(new Date().toISOString().split('T')[0]);
+    $('#status').val('PENDING');
+    
+    // Reset vendor and type
+    $('#vendor').val('');
+    $('#type').val('');
 }
 
 // Populate the edit modal with row data
@@ -737,5 +1644,154 @@ function formatEditDate(dateStr) {
 	if (!dateStr) return '';
 	const date = new Date(dateStr);
 	return isNaN(date.getTime()) ? '' : date.toISOString().split('T')[0];
-} 
+}
+
+function setupPrintButton() {
+	$('#printButton').on('click', function() {
+		// Get the current filtered data from the DataTable
+		var table = $('#storeTransmittalTable').DataTable();
+		var filteredData = table.rows({
+			search: 'applied'
+		}).data().toArray();
+
+		// Get the current filter type and criteria
+		var filterType = $('#dateFilterType').val();
+		var filterLabel = 'N/A';
+
+		// Generate appropriate filter label based on filter type
+		switch (filterType) {
+			case 'today':
+				filterLabel = 'Today (' + new Date().toLocaleDateString() + ')';
+				break;
+			case 'weekly':
+				filterLabel = 'This Week';
+				break;
+			case 'monthly':
+				filterLabel = formatMonthLabel(getSelectedMonth());
+				break;
+			case 'custom':
+				const startDate = $('#startDate').val();
+				const endDate = $('#endDate').val();
+				filterLabel = `${formatCustomDateRange(startDate, endDate)}`;
+				break;
+		}
+
+		// Create a new window for printing
+		var printWindow = window.open('', '_blank', 'width=800,height=600');
+
+		// Safely create the document content
+		var htmlContent = document.createElement('html');
+
+		// Create head section
+		var head = document.createElement('head');
+		var title = document.createElement('title');
+		title.textContent = 'Transmittal Report';
+		head.appendChild(title);
+
+		// Create style element
+		var style = document.createElement('style');
+		style.textContent = `
+            body { font-family: Arial, sans-serif; }
+            table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-bottom: 20px; 
+            }
+            th, td { 
+                border: 1px solid #ddd; 
+                padding: 8px; 
+                text-align: left; 
+            }
+            th { 
+                background-color: #f2f2f2; 
+                font-weight: bold; 
+            }
+            .print-header {
+                text-align: center;
+                margin-bottom: 20px;
+            }
+        `;
+		head.appendChild(style);
+		htmlContent.appendChild(head);
+
+		// Create body section
+		var body = document.createElement('body');
+
+		// Create print header
+		var printHeader = document.createElement('div');
+		printHeader.className = 'print-header';
+		printHeader.innerHTML = `
+            <h1>Transmittal Report</h1>
+            <p>Store: ${getFullStoreName(storeName) || 'N/A'}</p>
+            <p>Period: ${filterLabel}</p>
+            <p>Printed on: ${new Date().toLocaleString()}</p>
+        `;
+		body.appendChild(printHeader);
+
+		// Create table
+		var table = document.createElement('table');
+
+		// Create table header
+		var thead = document.createElement('thead');
+		var headerRow = document.createElement('tr');
+
+		// Specific columns to display
+		const desiredColumns = ['Date', 'Vendor', 'DR Number', 'Type', 'Amount', 'Remarks'];
+
+		// Create headers for desired columns
+		desiredColumns.forEach(function(columnName) {
+			var th = document.createElement('th');
+			th.textContent = columnName.toUpperCase();
+			headerRow.appendChild(th);
+		});
+
+		thead.appendChild(headerRow);
+		table.appendChild(thead);
+
+		// Create table body
+		var tbody = document.createElement('tbody');
+
+		// Add rows
+		filteredData.forEach(function(rowData) {
+			var tr = document.createElement('tr');
+
+			// Add specific columns
+			desiredColumns.forEach(function(columnName) {
+				var td = document.createElement('td');
+				var cellValue = rowData[columnName];
+
+				// Format cell value based on column
+				if (columnName === 'Date' || columnName === 'Amount') {
+					cellValue = columnName === 'Date' ?
+						formatDate(cellValue) // Use existing formatDate function
+						:
+						formatAmount(cellValue); // Use existing formatAmount function
+				}
+
+				// Safely convert cell value to string
+				td.textContent = cellValue !== null && cellValue !== undefined ?
+					String(cellValue) :
+					'';
+
+				tr.appendChild(td);
+			});
+
+			tbody.appendChild(tr);
+		});
+
+		table.appendChild(tbody);
+		body.appendChild(table);
+
+		htmlContent.appendChild(body);
+
+		// Write the complete HTML to the print window
+		printWindow.document.open();
+		printWindow.document.write('<!DOCTYPE html>');
+		printWindow.document.write(htmlContent.outerHTML);
+		printWindow.document.close();
+
+		// Trigger print
+		printWindow.print();
+	});
+}
 </script>
