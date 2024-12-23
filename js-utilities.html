@@ -1,0 +1,681 @@
+<!-- CSS Libraries -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+<!-- JavaScript Libraries -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>  
+// Global Variable Initialization Function
+function initializeGlobalVariables() {
+    window.dashboardPageCache = null;
+    window.dashboardDataCache = null;
+    window.adminDashboardPageCache = null;
+    window.adminDashboardDataCache = null;
+    window.lastFetchedTime = null;
+    window.lastDashboardFetchedTime = null;
+    window.transmittalDataCache = null;
+    window.lastTransmittalFetchedTime = null;
+    window.userSession = {};
+    window.selectedRows = [];
+    window.dataTable = null;
+    window.currentFilterCriteria = null;
+    window.isStoreSpecificView = false;
+}
+
+// Utility Functions for Notifications and Alerts
+function showLoadingScreen(title, text) {
+    Swal.fire({
+        title: title,
+        text: text,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+}
+
+function showToast(icon, title, position = 'top-end') {
+    Swal.fire({
+        toast: true,
+        position: position,
+        icon: icon,
+        title: title,
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true
+    });
+}
+
+// DOM and Element Utility Functions
+function checkMissingElements(elementIds) {
+    const missingElements = elementIds.filter(id => !document.getElementById(id));
+    if (missingElements.length) {
+        console.warn('The following elements are missing from the DOM:', missingElements.join(', '));
+    }
+}
+
+function setIndicatorElements(name, userType, userAddress, storeName) {
+    const indicatorNameElement = document.getElementById('indicator-name');
+    const indicatorAddressElement = document.getElementById('indicator-address');
+    const indicatorStoreElement = document.getElementById('indicator-store');
+    const lockNameElement = document.getElementById('lockName');
+    const lockTypeElement = document.getElementById('lockType');
+
+    if (lockNameElement && lockTypeElement) {
+        lockNameElement.innerText = name || 'Unknown';
+        lockTypeElement.innerText = userType || 'Guest';
+    } else {
+        console.warn('Lock elements (lockName, lockType) are missing from the DOM.');
+    }
+
+    if (indicatorNameElement && indicatorAddressElement && indicatorStoreElement) {
+        if (userType === 'Administrator') {
+            indicatorNameElement.innerText = 'ADMIN';
+            indicatorAddressElement.innerText = '';
+            indicatorStoreElement.innerText = '';
+        } else if (userType === 'USER') {
+            indicatorNameElement.innerText = name || 'Unknown';
+            indicatorAddressElement.innerText = userAddress || '';
+            indicatorStoreElement.innerText = storeName || '';
+        } else {
+            indicatorNameElement.innerText = 'Guest';
+            indicatorAddressElement.innerText = '';
+            indicatorStoreElement.innerText = '';
+        }
+    } else {
+        console.warn('One or more elements (indicator-name, indicator-address, indicator-store) are missing from the DOM.');
+    }
+}
+
+// Session and Authentication Utility Functions
+function setUsername(username) {
+    window.username = username;
+}
+
+function resetUserSession() {
+    userSession = {};
+}
+
+function resetGlobalVariables() {
+    dashboardDataCache = null;
+    dashboardPageCache = null;
+    adminDashboardPageCache = null;
+    adminDashboardDataCache = null;
+    lastFetchedTime = null;
+    lastDashboardFetchedTime = null;
+    transmittalDataCache = null;
+    lastTransmittalFetchedTime = null;
+    userSession = {};
+    selectedRows = [];
+    dataTable = {};
+    currentFilterCriteria = null;
+    isStoreSpecificView = null;
+}
+
+// Lock Screen Utility Functions
+function showLockScreen() {
+    $('#lockscreen').show();
+    $('#lockscreen input[placeholder="Password"]').val('');
+    isLocked = true;
+
+    const submitButton = document.querySelector('#lockscreen button[type="button"]');
+    submitButton.disabled = false;
+    submitButton.innerHTML = 'Unlock';
+}
+
+function hideLockscreen() {
+    $('#lockscreen').hide();
+    isLocked = false;
+} 
+
+// Logout Utility Function
+function logout() {
+    showLoadingScreen('Logging out...', 'Please wait while we log you out.');
+
+    resetGlobalVariables();
+    google.script.run.withSuccessHandler(function(content) {
+        document.open();
+        document.write(content);
+        document.close();
+        Swal.close();
+        showToast('success', 'Logged out successfully!');
+    }).logout();
+}
+
+// Unlock Function
+function unlock(event) {
+    event.preventDefault();
+    const submitButton = event.target;
+    submitButton.disabled = true;
+    submitButton.innerHTML = 'Unlocking... <span class="loader"></span>';
+
+    const passwordInput = document.querySelector('#lockscreen input[placeholder="Password"]');
+    const password = passwordInput.value;
+    const injectedUsername = window.username;
+    const injectedPassword = window.password;
+
+    setTimeout(() => {
+        if (injectedUsername === username && password === injectedPassword) {
+            console.log('Unlock successful:', { username });
+            hideLockscreen();
+            setUsername(injectedUsername);
+            resetUserSession();
+            showToast('success', 'Unlocked successfully!');
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Incorrect Password',
+                text: 'Please check your credentials and try again.',
+                confirmButtonText: 'Try Again',
+                backdrop: true,
+                allowOutsideClick: false
+            }).then(() => {
+                showLockScreen();
+            });
+
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Unlock';
+        }
+    }, 1000);
+}
+
+
+// Date and Formatting Utility Functions
+function formatDate(dateString) {
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    } catch (error) {
+        console.warn('Invalid date:', dateString);
+        return 'Invalid Date';
+    }
+}
+
+function formatMonth(monthKey) {
+    const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const [year, month] = monthKey.split('-');
+    return `${monthNames[parseInt(month, 10) - 1]} ${year}`;
+}
+
+// Color and Styling Utility Functions
+function getStatusColor(status) {
+    switch (status.toLowerCase()) {
+        case 'received':
+            return 'green';
+        case 'pending':
+            return 'yellow';
+        case 'not received':
+            return 'red';
+        default:
+            return 'gray';
+    }
+}
+
+function generateColors(count) {
+    const colors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+        '#9966FF', '#FF9F40', '#FF4081', '#3F51B5',
+        '#2196F3', '#FFC107', '#9C27B0', '#8BC34A',
+        '#FF5722', '#009688', '#795548', '#607D8B'
+    ];
+    return Array.from({
+        length: count
+    }, (_, i) => colors[i % colors.length]);
+}
+
+// Data Comparison and Validation Utility Functions
+function isEqual(obj1, obj2) {
+    return JSON.stringify(obj1) === JSON.stringify(obj2);
+}
+
+function calculateLateDRPercentage(lateDR, totalDR) {
+    return totalDR > 0 ? (lateDR / totalDR) * 100 : 0;
+}
+
+// Date Range Utility Functions
+function getCurrentWeekDates() {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const distanceToMonday = (dayOfWeek + 6) % 7;
+
+    const firstDayOfWeek = new Date(today);
+    firstDayOfWeek.setDate(today.getDate() - distanceToMonday);
+    firstDayOfWeek.setHours(0, 0, 0, 0);
+
+    const lastDayOfWeek = new Date(firstDayOfWeek);
+    lastDayOfWeek.setDate(firstDayOfWeek.getDate() + 6);
+    lastDayOfWeek.setHours(23, 59, 59, 999);
+
+    return {
+        start: firstDayOfWeek,
+        end: lastDayOfWeek
+    };
+}
+
+function isDateInRange(date, range) {
+    const normalizedDate = new Date(date);
+    normalizedDate.setHours(0, 0, 0, 0);
+    return normalizedDate >= range.start && normalizedDate <= range.end;
+}
+
+// Error Handling Utility Function
+function handleDashboardError(errorMessage, isBackground = false) {
+    console.error('Dashboard Error:', errorMessage);
+
+    // If not a background refresh, show a more detailed error
+    if (!isBackground) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Dashboard Error',
+            text: errorMessage,
+            confirmButtonText: 'OK',
+            confirmButtonColor: '#3085d6'
+        });
+    }
+
+    // Always show a toast notification
+    showToast('error', errorMessage);
+}
+
+function showLoadingDialog(message) {
+    return Swal.fire({
+        title: 'Loading',
+        text: message,
+        allowOutsideClick: false,
+        willOpen: () => Swal.showLoading(),
+        showConfirmButton: false
+    });
+}
+
+// Hide loading dialog
+function hideLoadingDialog() {
+	Swal.close();
+}
+
+// Date Formatting Utility Functions
+function formatMonthLabel(monthValue) {
+    if (!monthValue) return 'N/A';
+
+    const [year, month] = monthValue.split('-');
+    const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    const monthName = monthNames[parseInt(month) - 1];
+    return `${monthName} ${year}`;
+}
+
+function formatCustomDateRange(startDate, endDate) {
+    if (!startDate || !endDate) return 'Custom Range';
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+}
+
+function getFullStoreName(storeName) {
+    const storeNameMap = {
+        // Jollibee Stores
+        'JB1': 'Jollibee Aguindalo',
+        'JB2': 'Jollibee Tibanga',
+        'JB3': 'Jollibee Gaisano',
+        'JB4': 'Jollibee Tubod Iligan',
+        'JBLanao': 'Jollibee Tubod Lanao',
+        'JBMar': 'Jollibee Maranding',
+        'JBELSA': 'Jollibee El Salvador',
+
+        // Red Ribbon Stores
+        'RRT': 'Red Ribbon Tibanga',
+        'RRG': 'Red Ribbon Gaisano',
+        'RRQ': 'Red Ribbon Quezon',
+        'RRR': 'Red Ribbon Robinsons',
+        'RRLanao': 'Red Ribbon Tubod Lanao',
+
+        // Chowking Stores
+        'CKA': 'Chowking Aguinaldo',
+        'CKG': 'Chowking Gaisano',
+
+        // Greenwich Stores
+        'GWG': 'Greenwich Gaisano',
+        'GWT': 'Greenwich Tibanga',
+
+        // Mang Inasal Stores
+        'MIT': 'Mang Inasal Tibanga'
+    };
+
+    return storeNameMap[storeName] || storeName;
+}
+
+// Flexible Date Parsing
+function parseDateFlexibly(dateString) {
+    if (!dateString) return null;
+
+    dateString = dateString.trim();
+
+    const formats = [
+        /^(\d{2})-(\d{2})-(\d{4})$/,
+        /^(\d{2})\/(\d{2})\/(\d{4})$/,
+        /^(\d{4})-(\d{2})-(\d{2})$/,
+        /^(\d{2})-(\d{2})-(\d{4})$/
+    ];
+
+    for (let regex of formats) {
+        const match = dateString.match(regex);
+        if (match) {
+            if (match.length === 4) {
+                if (match[1].length === 4) {
+                    return new Date(match[0]);
+                } else {
+                    const firstNum = parseInt(match[1]);
+                    const secondNum = parseInt(match[2]);
+
+                    if (firstNum <= 12) {
+                        return new Date(match[3], firstNum - 1, secondNum);
+                    } else {
+                        return new Date(match[3], secondNum - 1, firstNum);
+                    }
+                }
+            }
+        }
+    }
+
+    const parsedDate = new Date(dateString);
+    return isNaN(parsedDate.getTime()) ? null : parsedDate;
+}
+
+// Formatting and Input Utility Functions
+function formatToCurrency(value) {
+    return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function setupAmountInput(selector) {
+    $(selector)
+        .off('input')
+        .on('input', function() {
+            const value = $(this).val().replace(/[^0-9.]/g, '');
+            const decimalCount = (value.match(/\./g) || []).length;
+            
+            if (decimalCount > 1) {
+                const lastDotIndex = value.lastIndexOf('.');
+                $(this).val(value.substring(0, lastDotIndex + 1) + value.substring(lastDotIndex + 1).replace(/\./g, ''));
+            } else {
+                $(this).val(value);
+            }
+        })
+        .off('blur')
+        .on('blur', function() {
+            const inputField = $(this);
+            const rawValue = inputField.val().replace(/[^0-9.]/g, '');
+            const parsedValue = parseFloat(rawValue);
+            
+            if (!isNaN(parsedValue)) {
+                const formattedValue = formatToCurrency(parsedValue);
+                inputField.val(formattedValue);
+            } else {
+                inputField.val('');
+            }
+        });
+}
+
+// DOM and Form Utility Functions
+function createDropdownOption(value, text, disabled = false) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.text = text;
+    option.disabled = disabled;
+    return option;
+}
+
+function resetForm(selector) {
+    $(selector)[0].reset();
+    $(selector).closest('.modal').modal('hide');
+}
+
+function resetSubmitButton(button) {
+    button.disabled = false;
+    button.innerHTML = 'Submit';
+}
+
+function setSubmitButtonState(selector, isDisabled, text) {
+    const button = document.querySelector(selector);
+    button.disabled = isDisabled;
+    button.innerHTML = isDisabled ? 
+        `<span class="spinner-border spinner-border-sm" role="status"></span> ${text}` : 
+        'Submit';
+    return button;
+}
+
+// UI Blocking Utility Functions
+function blockUI(message = 'Processing...') {
+    const blockOverlay = $('<div>', {
+        id: 'ui-block-overlay',
+        css: {
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 9999,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            color: 'white',
+            fontSize: '1.5rem'
+        }
+    }).html(`
+        <div class="text-center">
+            <div class="spinner-border text-light mb-3" role="status"></div>
+            <p>${message}</p>
+        </div>
+    `);
+
+    $('body').css('pointer-events', 'none');
+    $('body').append(blockOverlay);
+}
+
+function unblockUI() {
+    $('#ui-block-overlay').remove();
+    $('body').css('pointer-events', 'auto');
+}
+
+// Store-Related Utility Functions
+function getStoreData() {
+    return {
+        Jollibee: [
+            { id: 'JB1', name: 'Aguindalo' },
+            { id: 'JB2', name: 'Tibanga' },
+            { id: 'JB3', name: 'Gaisano' },
+            { id: 'JB4', name: 'Tubod Iligan' },
+            { id: 'JBLanao', name: 'Tubod Lanao' },
+            { id: 'JBMar', name: 'Maranding' },
+            { id: 'JBELSA', name: 'El Salvador' }
+        ],
+        'Red Ribbon': [
+            { id: 'RRT', name: 'Tibanga' },
+            { id: 'RRG', name: 'Gaisano' },
+            { id: 'RRQ', name: 'Quezon' },
+            { id: 'RRR', name: 'Robinsons' },
+            { id: 'RRLanao', name: 'Tubod Lanao' }
+        ],
+        Chowking: [
+            { id: 'CKA', name: 'Aguinaldo' },
+            { id: 'CKG', name: 'Gaisano' }
+        ],
+        Greenwich: [
+            { id: 'GWG', name: 'Gaisano' },
+            { id: 'GWT', name: 'Tibanga' }
+        ],
+        'Mang Inasal': [
+            { id: 'MIT', name: 'Tibanga' }
+        ]
+    };
+}
+
+function getStoreImages() {
+    return {
+        Jollibee: 'https://i.imgur.com/eD1LdqP.jpg',
+        'Red Ribbon': 'https://i.imgur.com/NcYN9cm.jpg',
+        Chowking: 'https://i.imgur.com/hdZ2qUI.jpg',
+        Greenwich: 'https://i.imgur.com/xmsnHYf.jpg',
+        'Mang Inasal': 'https://i.imgur.com/VIAepr4.jpg'
+    };
+}
+
+// Metrics Processing Utility Functions
+function processStoreData(storeData) {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    return storeData.reduce((acc, row) => {
+        try {
+            if (!row || row.length < 10) return acc;
+
+            const deliveryDate = new Date(row[7]);
+
+            if (isNaN(deliveryDate.getTime())) return acc;
+
+            if (deliveryDate.getMonth() === currentMonth &&
+                deliveryDate.getFullYear() === currentYear) {
+
+                const status = (row[6] || '').toUpperCase().trim();
+                const isLate = row[9] === '✔';
+
+                acc.dr++;
+
+                switch (status) {
+                    case 'PENDING':
+                        acc.pending++;
+                        break;
+                    case 'RECEIVED':
+                        acc.received++;
+                        break;
+                    case 'NOT RECEIVED':
+                        acc.notReceived++;
+                        break;
+                }
+
+                if (isLate) acc.late++;
+            }
+        } catch (error) {
+            console.error('Error processing row data:', error);
+        }
+
+        return acc;
+    }, {
+        pending: 0,
+        received: 0,
+        notReceived: 0,
+        late: 0,
+        dr: 0
+    });
+}
+
+// Date and Month Utility Functions
+function getMonthYearKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function logMonthlyData(storeData) {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    console.log(`Filtering for ${now.toLocaleString('default', { month: 'long' })} ${currentYear}`);
+
+    const currentMonthData = storeData.filter(row => {
+        const deliveryDate = new Date(row[1]);
+        return deliveryDate.getMonth() === currentMonth &&
+            deliveryDate.getFullYear() === currentYear;
+    });
+
+    console.log('Current month data:', currentMonthData);
+    return currentMonthData;
+}
+
+// Card and Dropdown Utility Functions
+function createDropdownOption(value, text, disabled = false) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.text = text;
+    option.disabled = disabled;
+    return option;
+}
+
+function filterCards(selectedStore) {
+    const cards = document.querySelectorAll('.card');
+    cards.forEach(card => {
+        const storeName = card.querySelector('h3').textContent;
+        if (selectedStore === 'All' || storeName === selectedStore) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+// Dropdown and Event Handling Utility Functions
+function initializeDropdownMenu() {
+    document.addEventListener('click', function(event) {
+        try {
+            const moreButton = event.target.closest('.more');
+            if (moreButton) {
+                const dropdown = moreButton.nextElementSibling;
+                if (dropdown && dropdown.classList.contains('admin-dropdown-menu')) {
+                    dropdown.classList.toggle('show');
+                    console.log('Toggled dropdown menu');
+                }
+            } else if (!event.target.closest('.admin-dropdown-menu')) {
+                document.querySelectorAll('.admin-dropdown-menu.show').forEach(menu => {
+                    menu.classList.remove('show');
+                });
+            }
+        } catch (error) {
+            console.error('Error handling dropdown click:', error);
+        }
+    });
+}
+
+function initializeFilterButton() {
+    try {
+        const filterButton = document.getElementById('filterButton');
+        if (filterButton) {
+            filterButton.addEventListener('click', function() {
+                try {
+                    const storeSelectionElement = document.getElementById('storeSelection');
+                    if (storeSelectionElement) {
+                        const selectedStore = storeSelectionElement.value;
+                        console.log('Filter button clicked. Selected store:', selectedStore);
+                        filterCards(selectedStore);
+                    } else {
+                        console.warn('Store selection element not found');
+                    }
+                } catch (error) {
+                    console.error('Error handling filter button click:', error);
+                }
+            });
+            console.log('Filter button event listener initialized');
+        } else {
+            console.warn('Filter button not found in the document');
+        }
+    } catch (error) {
+        console.error('Error initializing filter button:', error);
+    }
+}
+</script>
