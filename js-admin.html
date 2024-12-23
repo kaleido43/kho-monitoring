@@ -1,50 +1,16 @@
 <script>
-// Constants and Data
-const storeData = {
-    Jollibee: [
-        { id: 'JB1', name: 'Aguindalo' },
-        { id: 'JB2', name: 'Tibanga' },
-        { id: 'JB3', name: 'Gaisano' },
-        { id: 'JB4', name: 'Tubod Iligan' },
-        { id: 'JBLanao', name: 'Tubod Lanao' },
-        { id: 'JBMar', name: 'Maranding' },
-        { id: 'JBELSA', name: 'El Salvador' }
-    ],
-    'Red Ribbon': [
-        { id: 'RRT', name: 'Tibanga' },
-        { id: 'RRG', name: 'Gaisano' },
-        { id: 'RRQ', name: 'Quezon' },
-        { id: 'RRR', name: 'Robinsons' },
-        { id: 'RRLanao', name: 'Tubod Lanao' }
-    ],
-    Chowking: [
-        { id: 'CKA', name: 'Aguinaldo' },
-        { id: 'CKG', name: 'Gaisano' }
-    ],
-    Greenwich: [
-        { id: 'GWG', name: 'Gaisano' },
-        { id: 'GWT', name: 'Tibanga' }
-    ],
-    'Mang Inasal': [
-        { id: 'MIT', name: 'Tibanga' }
-    ]
-};
+	// Constants and Data
+	const storeData = getStoreData();
 
-const storeImages = {
-    Jollibee: 'https://i.imgur.com/eD1LdqP.jpg',
-    'Red Ribbon': 'https://i.imgur.com/NcYN9cm.jpg',
-    Chowking: 'https://i.imgur.com/hdZ2qUI.jpg',
-    Greenwich: 'https://i.imgur.com/xmsnHYf.jpg',
-    'Mang Inasal': 'https://i.imgur.com/VIAepr4.jpg'
-};
+const storeImages = getStoreImages();
 
 function loadAdminDashboardPage() {
-    console.log('Loading Admin Dashboard...');
+	console.log('Loading Admin Dashboard...');
 
-    // Create loading popup
-    const loadingPopup = Swal.fire({
-        title: 'Preparing Dashboard',
-        html: `
+	// Create loading popup
+	const loadingPopup = Swal.fire({
+		title: 'Preparing Dashboard',
+		html: `
             <div>Loading dashboard components...</div>
             <small>
                 • Initializing page layout<br>
@@ -52,96 +18,109 @@ function loadAdminDashboardPage() {
                 • Setting up metrics
             </small>
         `,
-        didOpen: () => {
-            Swal.showLoading();
-        },
-        allowOutsideClick: false,
-        showConfirmButton: false
-    });
+		didOpen: () => {
+			Swal.showLoading();
+		},
+		allowOutsideClick: false,
+		showConfirmButton: false
+	});
 
-    if (dashboardPageCache) {
-        // Use cached page
-        document.getElementById('content-page').innerHTML = dashboardPageCache;
-        updatePageIndicator('admin-dashboard');
-        initializeStoreSelection();
+	if (dashboardPageCache) {
+		// Use cached page
+		document.getElementById('content-page').innerHTML = dashboardPageCache;
+		updatePageIndicator('admin-dashboard');
+		initializeStoreSelection();
 
-        // Initialize navMetrics with default values or cached values
-        const navMetrics = [
-            { id: 'navNew', value: dashboardDataCache?.dashboardSummary?.weeklyDRCount || 0 },
-            { id: 'navMonthly', value: dashboardDataCache?.dashboardSummary?.drCount || 0 },
-            { id: 'navLate', value: dashboardDataCache?.dashboardSummary?.lateCount || 0 },
-            { id: 'navPending', value: dashboardDataCache?.dashboardSummary?.pendingCount || 0 }
-        ];
+		// Initialize navMetrics with default values or cached values
+		const navMetrics = [{
+				id: 'navNew',
+				value: dashboardDataCache?.dashboardSummary?.weeklyDRCount || 0
+			},
+			{
+				id: 'navMonthly',
+				value: dashboardDataCache?.dashboardSummary?.drCount || 0
+			},
+			{
+				id: 'navLate',
+				value: dashboardDataCache?.dashboardSummary?.lateCount || 0
+			},
+			{
+				id: 'navPending',
+				value: dashboardDataCache?.dashboardSummary?.pendingCount || 0
+			}
+		];
 
-        // Update nav metrics elements
-        navMetrics.forEach(({id, value}) => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.textContent = value;
-            }
-        });
+		// Update nav metrics elements
+		navMetrics.forEach(({
+			id,
+			value
+		}) => {
+			const element = document.getElementById(id);
+			if (element) {
+				element.textContent = value;
+			}
+		});
 
-        renderCards();
-        
-        if (dashboardDataCache) {
-            updateDashboard();
-        }
-    } else {
-        loadPage('admin-dashboard', function() {
-            dashboardPageCache = document.getElementById('content-page').innerHTML;
-            lastDashboardFetchedTime = new Date();
-            initializeStoreSelection();
+		renderCards();
 
-            renderCards(); // Render all cards initially
-        });
-    }
+		if (dashboardDataCache) {
+			updateDashboard();
+		}
+	} else {
+		loadPage('admin-dashboard', function() {
+			dashboardPageCache = document.getElementById('content-page').innerHTML;
+			lastDashboardFetchedTime = new Date();
+			initializeStoreSelection();
+
+			renderCards(); // Render all cards initially
+		});
+	}
 }
 
 function initializeStoreSelection() {
-    console.log('Initializing store selection and event listeners...');
-    initializeDropdownMenu();
-    initializeFilterButton();
+	console.log('Initializing store selection and event listeners...');
+	initializeDropdownMenu();
+	initializeFilterButton();
 }
 
 // UI Functions
 function createCard(storeName, storeInfo) {
-    const safeStoreName = storeName.replace(/\s+/g, '');
+	const safeStoreName = storeName.replace(/\s+/g, '');
 
-    // Define metrics with their icons, tooltips, and labels
-    const metrics = [
-        { 
-            id: 'pending', 
-            icon: '🕒', 
-            tooltip: 'Pending', 
-            label: 'Pending' 
-        },
-        { 
-            id: 'received', 
-            icon: '✅', 
-            tooltip: 'Received', 
-            label: 'Received' 
-        },
-        { 
-            id: 'notReceived', 
-            icon: '❌', 
-            tooltip: 'Not Received', 
-            label: 'Not Recv' 
-        },
-        { 
-            id: 'late', 
-            icon: '⏰', 
-            tooltip: 'Late', 
-            label: 'Late' 
-        },
-        { 
-            id: 'dr', 
-            icon: '📋', 
-            tooltip: 'Total DR', 
-            label: 'DR Total' 
-        }
-    ];
+	// Define metrics with their icons, tooltips, and labels
+	const metrics = [{
+			id: 'pending',
+			icon: '🕒',
+			tooltip: 'Pending',
+			label: 'Pending'
+		},
+		{
+			id: 'received',
+			icon: '✅',
+			tooltip: 'Received',
+			label: 'Received'
+		},
+		{
+			id: 'notReceived',
+			icon: '❌',
+			tooltip: 'Not Received',
+			label: 'Not Recv'
+		},
+		{
+			id: 'late',
+			icon: '⏰',
+			tooltip: 'Late',
+			label: 'Late'
+		},
+		{
+			id: 'dr',
+			icon: '📋',
+			tooltip: 'Total DR',
+			label: 'DR Total'
+		}
+	];
 
-    const metricDivs = metrics.map(metric => `
+	const metricDivs = metrics.map(metric => `
         <div class="metric-container" title="${metric.tooltip}">
             <div class="small-card">
                 <div class="metric-content">
@@ -152,7 +131,7 @@ function createCard(storeName, storeInfo) {
         </div>
     `).join('');
 
-    return `
+	return `
         <div class="card" id="card-${storeInfo.id}">
             <div class="card-header">
                 <div class="card-header-content">
@@ -182,395 +161,264 @@ function createCard(storeName, storeInfo) {
 
 // Function to toggle dropdown menu
 function toggleDropdown(element) {
-    const dropdownMenu = element.nextElementSibling;
-    const isOpen = dropdownMenu.style.display === 'block';
-    
-    // Close all other open dropdowns
-    document.querySelectorAll('.admin-dropdown-menu').forEach(menu => {
-        menu.style.display = 'none';
-    });
-    
-    // Toggle current dropdown
-    dropdownMenu.style.display = isOpen ? 'none' : 'block';
+	const dropdownMenu = element.nextElementSibling;
+	const isOpen = dropdownMenu.style.display === 'block';
+
+	// Close all other open dropdowns
+	document.querySelectorAll('.admin-dropdown-menu').forEach(menu => {
+		menu.style.display = 'none';
+	});
+
+	// Toggle current dropdown
+	dropdownMenu.style.display = isOpen ? 'none' : 'block';
 }
 
 // Close dropdown when clicking outside
 document.addEventListener('click', function(event) {
-    const dropdowns = document.querySelectorAll('.admin-dropdown-menu');
-    dropdowns.forEach(dropdown => {
-        if (!dropdown.parentElement.contains(event.target)) {
-            dropdown.style.display = 'none';
-        }
-    });
+	const dropdowns = document.querySelectorAll('.admin-dropdown-menu');
+	dropdowns.forEach(dropdown => {
+		if (!dropdown.parentElement.contains(event.target)) {
+			dropdown.style.display = 'none';
+		}
+	});
 });
 
 // Modify the viewDetails function
 function viewDetails(storeIdParam, storeNameParam) {
-    console.log('View details for store ID:', storeIdParam);
-    console.log('Store Name:', storeNameParam);
+	console.log('View details for store:', storeIdParam);
+	console.log('Store Name:', storeNameParam);
 
-    // Store the current admin dashboard state before navigating
-    adminDashboardPageCache = dashboardPageCache;
-    adminDashboardDataCache = dashboardDataCache;
+	// Set global variables for store-specific view
+	storeName = storeIdParam; // Set storeName globally
+	isStoreSpecificView = true;
 
-    // Reset the current dashboard cache to ensure fresh data for store view
-    dashboardPageCache = null;
-    dashboardDataCache = null;
+	// Store the current admin dashboard state before navigating
+	adminDashboardPageCache = dashboardPageCache;
+	adminDashboardDataCache = dashboardDataCache;
 
-    // Call loadUserDashboardPage with storeId and set isStoreSpecificView to true
-    loadUserDashboardPage(storeIdParam, true);
+	// Reset dashboard caches to ensure fresh data
+	dashboardPageCache = null;
+	dashboardDataCache = null;
+
+	// Navigate to user dashboard with store-specific view
+	loadUserDashboardPage();
 }
 
 function renderCards() {
-    const cardsContainer = document.getElementById('cards-container');
-    cardsContainer.innerHTML = '';
-    
-    Object.entries(storeData).forEach(([storeName, stores]) => {
-        stores.forEach(storeInfo => {
-            cardsContainer.innerHTML += createCard(storeName, storeInfo);
-        });
-    });
+	const cardsContainer = document.getElementById('cards-container');
+	cardsContainer.innerHTML = '';
 
-    // Return the promise from fetchAdminDashboardData
-    return fetchAdminDashboardData('All');
+	Object.entries(storeData).forEach(([storeName, stores]) => {
+		stores.forEach(storeInfo => {
+			cardsContainer.innerHTML += createCard(storeName, storeInfo);
+		});
+	});
+
+	// Return the promise from fetchAdminDashboardData
+	return fetchAdminDashboardData('All');
 }
 
 function fetchAdminDashboardData(selectedStore = 'All') {
-    console.log('Fetching admin dashboard data for store:', selectedStore);
+	console.log('Fetching admin dashboard data for store:', selectedStore);
 
-    // Comprehensive data retrieval process
-    function retrieveAllData() {
-        return new Promise((resolve, reject) => {
-            google.script.run
-                .withSuccessHandler(function(data) {
-                    try {
-                        const parsedData = JSON.parse(data);
-                        if (parsedData.error) throw new Error(parsedData.error);
+	// Comprehensive data retrieval process
+	function retrieveAllData() {
+		return new Promise((resolve, reject) => {
+			google.script.run
+				.withSuccessHandler(function(data) {
+					try {
+						const parsedData = JSON.parse(data);
+						if (parsedData.error) throw new Error(parsedData.error);
 
-                        resolve(parsedData);
-                    } catch (error) {
-                        reject(error);
-                    }
-                })
-                .withFailureHandler(reject)
-                .getAdminDashboardData(selectedStore);
-        });
-    }
+						resolve(parsedData);
+					} catch (error) {
+						reject(error);
+					}
+				})
+				.withFailureHandler(reject)
+				.getAdminDashboardData(selectedStore);
+		});
+	}
 
-    // Fetch and process all dashboard data
-    return retrieveAllData()
-        .then(parsedData => {
-            // Update dashboard data cache
-            dashboardDataCache = parsedData;
+	// Fetch and process all dashboard data
+	return retrieveAllData()
+		.then(parsedData => {
+			// Update dashboard data cache
+			dashboardDataCache = parsedData;
 
-            // Update store metrics
-            updateStoreMetrics();
-            
-            // Return a promise for overall metrics update
-            return new Promise((resolve, reject) => {
-                try {
-                    // Update overall metrics
-                    updateOverallMetrics();
-                    resolve(); // Resolve the promise when the update is successful
-                } catch (error) {
-                    reject(error); // Reject the promise if there's an error
-                }
-            });
-        })
-        .then(() => {
-            // Close loading popup only after overall metrics update is successful
-            Swal.close();
+			// Update store metrics
+			updateStoreMetrics();
 
-            // Show success toast message
-            showToast('success', 'Admin dashboard loaded successfully!');
-        })
-        .catch(error => {
-            console.error('Dashboard data retrieval failed:', error);
-            
-            // Show error popup
-            Swal.fire({
-                icon: 'error',
-                title: 'Data Retrieval Failed',
-                text: 'Unable to load dashboard data. Please try again.',
-                footer: `<small>Error: ${error.message || 'Unknown error'}</small>`,
-                confirmButtonText: 'Retry',
-                showCancelButton: true,
-                cancelButtonText: 'Close'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Retry fetching dashboard data
-                    fetchAdminDashboardData(selectedStore);
-                }
-            });
+			// Return a promise for overall metrics update
+			return new Promise((resolve, reject) => {
+				try {
+					// Update overall metrics
+					updateOverallMetrics();
+					resolve(); // Resolve the promise when the update is successful
+				} catch (error) {
+					reject(error); // Reject the promise if there's an error
+				}
+			});
+		})
+		.then(() => {
+			// Close loading popup only after overall metrics update is successful
+			Swal.close();
 
-            // Ensure loading popup is closed in case of error
-            Swal.close();
-        });
+			// Show success toast message
+			showToast('success', 'Admin dashboard loaded successfully!');
+		})
+		.catch(error => {
+			console.error('Dashboard data retrieval failed:', error);
+
+			// Show error popup
+			Swal.fire({
+				icon: 'error',
+				title: 'Data Retrieval Failed',
+				text: 'Unable to load dashboard data. Please try again.',
+				footer: `<small>Error: ${error.message || 'Unknown error'}</small>`,
+				confirmButtonText: 'Retry',
+				showCancelButton: true,
+				cancelButtonText: 'Close'
+			}).then((result) => {
+				if (result.isConfirmed) {
+					// Retry fetching dashboard data
+					fetchAdminDashboardData(selectedStore);
+				}
+			});
+
+			// Ensure loading popup is closed in case of error
+			Swal.close();
+		});
 }
 
 // Modify handleFetchError to provide more robust error handling
 function handleFetchError(error) {
-    console.error('Dashboard data fetch error:', error);
-    
-    // Ensure any existing popups are closed
-    Swal.close();
+	console.error('Dashboard data fetch error:', error);
 
-    // Show error popup
-    Swal.fire({
-        icon: 'error',
-        title: 'Data Retrieval Failed',
-        text: 'Unable to load dashboard data. Please try again.',
-        footer: `<small>Error: ${error.message || 'Unknown error'}</small>`,
-        confirmButtonText: 'Retry',
-        showCancelButton: true,
-        cancelButtonText: 'Close'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // Retry fetching dashboard data
-            fetchAdminDashboardData();
-        }
-    });
+	// Ensure any existing popups are closed
+	Swal.close();
+
+	// Show error popup
+	Swal.fire({
+		icon: 'error',
+		title: 'Data Retrieval Failed',
+		text: 'Unable to load dashboard data. Please try again.',
+		footer: `<small>Error: ${error.message || 'Unknown error'}</small>`,
+		confirmButtonText: 'Retry',
+		showCancelButton: true,
+		cancelButtonText: 'Close'
+	}).then((result) => {
+		if (result.isConfirmed) {
+			// Retry fetching dashboard data
+			fetchAdminDashboardData();
+		}
+	});
 }
 
 // Handle successful data retrieval
 function handleDashboardData(response) {
-    try {
-        const data = JSON.parse(response);
-        if (data.error) throw new Error(data.error);
+	try {
+		const data = JSON.parse(response);
+		if (data.error) throw new Error(data.error);
 
-        dashboardDataCache = data;
-        updateDashboard(); // Update dashboard with the newly fetched data
-    } catch (error) {
-        console.error('Error processing dashboard data:', error);
-        handleFetchError('Error processing dashboard data');
-    }
+		dashboardDataCache = data;
+		updateDashboard(); // Update dashboard with the newly fetched data
+	} catch (error) {
+		console.error('Error processing dashboard data:', error);
+		handleFetchError('Error processing dashboard data');
+	}
 }
 
 function updateDashboard() {
-    try {
-        console.log('Updating dashboard...');
-        updateStoreMetrics();
-        updateOverallMetrics(); 
-        console.log('Dashboard update complete.');
-    } catch (error) {
-        console.error('Error updating dashboard:', error);
-    }
+	try {
+		console.log('Updating dashboard...');
+		updateStoreMetrics();
+		updateOverallMetrics();
+		console.log('Dashboard update complete.');
+	} catch (error) {
+		console.error('Error updating dashboard:', error);
+	}
 }
 
 function updateOverallMetrics() {
-    console.log('Updating overall dashboard metrics...');
+	console.log('Updating overall dashboard metrics...');
 
-    // Ensure summary data exists
-    const summary = dashboardDataCache?.dashboardSummary;
-    if (!summary) {
-        console.warn('No summary data available for metrics update');
-        throw new Error('No summary data available');
-    }
+	// Ensure summary data exists
+	const summary = dashboardDataCache?.dashboardSummary;
+	if (!summary) {
+		console.warn('No summary data available for metrics update');
+		throw new Error('No summary data available');
+	}
 
-    const currentMonthKey = getMonthYearKey(new Date());
+	const currentMonthKey = getMonthYearKey(new Date());
 
-    // Define metrics with fallback to 0
-    const metrics = {
-        'totalDRCount': summary.drCount || 0,
-        'totalPending': summary.pendingCount || 0,
-        'totalReceived': summary.receivedCount || 0,
-        'totalNotReceived': summary.notReceivedCount || 0,
-        'totalLate': (summary.lateCount?.[currentMonthKey] || 0)
-    };
+	// Define metrics with fallback to 0
+	const metrics = {
+		'totalDRCount': summary.drCount || 0,
+		'totalPending': summary.pendingCount || 0,
+		'totalReceived': summary.receivedCount || 0,
+		'totalNotReceived': summary.notReceivedCount || 0,
+		'totalLate': (summary.lateCount?.[currentMonthKey] || 0)
+	};
 
-    // Update each metric element
-    Object.entries(metrics).forEach(([id, value]) => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.textContent = value.toLocaleString(); // Add thousand separators
-        }
-    });
+	// Update each metric element
+	Object.entries(metrics).forEach(([id, value]) => {
+		const element = document.getElementById(id);
+		if (element) {
+			element.textContent = value.toLocaleString(); // Add thousand separators
+		}
+	});
 
-    console.log('Overall metrics update completed successfully.');
+	console.log('Overall metrics update completed successfully.');
 }
 
 function updateStoreMetrics() {
-    console.log('Comprehensive store metrics update started...');
+	console.log('Comprehensive store metrics update started...');
 
-    // Ensure dashboardDataCache exists
-    if (!dashboardDataCache || !dashboardDataCache.storeData) {
-        console.warn('No dashboard data available for metrics update');
-        return;
-    }
+	// Ensure dashboardDataCache exists
+	if (!dashboardDataCache || !dashboardDataCache.storeData) {
+		console.warn('No dashboard data available for metrics update');
+		return;
+	}
 
-    // Track metrics update process
-    const metricsUpdateStart = performance.now();
+	// Track metrics update process
+	const metricsUpdateStart = performance.now();
 
-    // Process metrics for each store
-    Object.entries(dashboardDataCache.storeData).forEach(([storeId, storeData]) => {
-        try {
-            // Log raw data and monthly filtered data
-            console.log(`Processing metrics for store ID: ${storeId}`);
-            console.log('Raw store data:', storeData);
-            
-            // Process store-specific metrics
-            const metrics = processStoreData(storeData);
-            
-            // Update card metrics for the specific store
-            updateCardMetrics(storeId, metrics);
-        } catch (error) {
-            console.error(`Error processing metrics for store ${storeId}:`, error);
-        }
-    });
+	// Process metrics for each store
+	Object.entries(dashboardDataCache.storeData).forEach(([storeId, storeData]) => {
+		try {
+			// Log raw data and monthly filtered data
+			console.log(`Processing metrics for store ID: ${storeId}`);
+			console.log('Raw store data:', storeData);
 
-    const metricsUpdateEnd = performance.now();
-    console.log(`Store metrics update completed in ${(metricsUpdateEnd - metricsUpdateStart).toFixed(2)}ms`);
+			// Process store-specific metrics
+			const metrics = processStoreData(storeData);
+
+			// Update card metrics for the specific store
+			updateCardMetrics(storeId, metrics);
+		} catch (error) {
+			console.error(`Error processing metrics for store ${storeId}:`, error);
+		}
+	});
+
+	const metricsUpdateEnd = performance.now();
+	console.log(`Store metrics update completed in ${(metricsUpdateEnd - metricsUpdateStart).toFixed(2)}ms`);
 }
 
 function updateCardMetrics(storeId, metrics) {
-    const metricIds = ['pending', 'received', 'notReceived', 'late', 'dr'];
-    metricIds.forEach(metric => {
-        const element = document.getElementById(`${metric}Count-${storeId}`);
-        if (element) {
-            element.textContent = metrics[metric] || 0;
-        }
-    });
-}
-
-function processStoreData(storeData) {
-    // Robust date and data processing
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    // Enhanced data processing with error handling
-    return storeData.reduce((acc, row) => {
-        try {
-            // Validate row data
-            if (!row || row.length < 10) return acc;
-
-            const deliveryDate = new Date(row[7]);
-            
-            // Validate date
-            if (isNaN(deliveryDate.getTime())) return acc;
-
-            // Filter for current month and year
-            if (deliveryDate.getMonth() === currentMonth && 
-                deliveryDate.getFullYear() === currentYear) {
-                
-                const status = (row[6] || '').toUpperCase().trim();
-                const isLate = row[9] === '✔';
-
-                // Increment metrics
-                acc.dr++;
-
-                // Update status-based counts
-                switch (status) {
-                    case 'PENDING':
-                        acc.pending++;
-                        break;
-                    case 'RECEIVED':
-                        acc.received++;
-                        break;
-                     case 'NOT RECEIVED':
-                        acc.notReceived++;
-                        break;
-                }
-
-                // Update late count
-                if (isLate) acc.late++;
-            }
-        } catch (error) {
-            console.error('Error processing row data:', error);
-        }
-
-        return acc;
-    }, { pending: 0, received: 0, notReceived: 0, late: 0, dr: 0 });
-}
-
-// Add a helper function to log the filtering
-function logMonthlyData(storeData) {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    
-    console.log(`Filtering for ${now.toLocaleString('default', { month: 'long' })} ${currentYear}`);
-    
-    const currentMonthData = storeData.filter(row => {
-        const deliveryDate = new Date(row[1]);
-        return deliveryDate.getMonth() === currentMonth && 
-               deliveryDate.getFullYear() === currentYear;
-    });
-    
-    console.log('Current month data:', currentMonthData);
-    return currentMonthData;
-}
-
-// Utility Functions
-function getMonthYearKey(date) {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+	const metricIds = ['pending', 'received', 'notReceived', 'late', 'dr'];
+	metricIds.forEach(metric => {
+		const element = document.getElementById(`${metric}Count-${storeId}`);
+		if (element) {
+			element.textContent = metrics[metric] || 0;
+		}
+	});
 }
 
 function storeSelection() {
-    console.log('Initializing store selection and event listeners...');
-    initializeDropdownMenu();
-    initializeFilterButton();
-    renderCards(); // Render cards for 'All' stores initially
-}
-
-function initializeDropdownMenu() {
-    document.addEventListener('click', function(event) {
-        try {
-            const moreButton = event.target.closest('.more');
-            if (moreButton) {
-                const dropdown = moreButton.nextElementSibling;
-                if (dropdown && dropdown.classList.contains('admin-dropdown-menu')) { // Updated class check
-                    dropdown.classList.toggle('show');
-                    console.log('Toggled dropdown menu');
-                }
-            } else if (!event.target.closest('.admin-dropdown-menu')) { // Updated class check
-                // Close all open dropdowns
-                document.querySelectorAll('.admin-dropdown-menu.show').forEach(menu => {
-                    menu.classList.remove('show');
-                });
-            }
-        } catch (error) {
-            console.error('Error handling dropdown click:', error);
-        }
-    });
-}
-
-function initializeFilterButton() {
-    try {
-        const filterButton = document.getElementById('filterButton');
-        if (filterButton) {
-            filterButton.addEventListener('click', function() {
-                try {
-                    const storeSelectionElement = document.getElementById('storeSelection');
-                    if (storeSelectionElement) {
-                        const selectedStore = storeSelectionElement.value;
-                        console.log('Filter button clicked. Selected store:', selectedStore);
-                        filterCards(selectedStore);
-                    } else {
-                        console.warn('Store selection element not found');
-                    }
-                } catch (error) {
-                    console.error('Error handling filter button click:', error);
-                }
-            });
-            console.log('Filter button event listener initialized');
-        } else {
-            console.warn('Filter button not found in the document');
-        }
-    } catch (error) {
-        console.error('Error initializing filter button:', error);
-    }
-}
-
-function filterCards(selectedStore) {
-    const cards = document.querySelectorAll('.card');
-    cards.forEach(card => {
-        const storeName = card.querySelector('h3').textContent;
-        if (selectedStore === 'All' || storeName === selectedStore) {
-            card.style.display = 'block';
-        } else {
-            card.style.display = 'none';
-        }
-    });
+	console.log('Initializing store selection and event listeners...');
+	initializeDropdownMenu();
+	initializeFilterButton();
+	renderCards(); // Render cards for 'All' stores initially
 }
 </script>
