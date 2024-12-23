@@ -69,9 +69,11 @@ function servePage(type, store, name, address, username, password) {
   dashboard = HtmlService.createHtmlOutputFromFile('js-dashboard').getContent();
   transmittal = HtmlService.createHtmlOutputFromFile('js-transmittal').getContent();
   admin = HtmlService.createHtmlOutputFromFile('js-admin').getContent();
+  utility = HtmlService.createHtmlOutputFromFile('js-utilities').getContent();
 
   // Append the CSS inside the <head> tag and JS before the closing </body> tag
   html = html.replace('</head>', css + '</head>');  // Insert JS before closing </body> tag
+  html = html.replace('</body>', utility + '</body>');  // Insert JS before closing </body> tag
   html = html.replace('</body>', js + '</body>');  // Insert JS before closing </body> tag
   html = html.replace('</body>', dashboard + '</body>');  // Insert JS before closing </body> tag
   html = html.replace('</body>', transmittal + '</body>');  // Insert JS before closing </body> tag
@@ -429,14 +431,16 @@ function getDashboardData(storeName) {
             return getDashboardData(defaultSheetName); 
         }
 
-        const dataRange = sheet.getRange('A2:J' + sheet.getLastRow());
+        const dataRange = sheet.getRange('A2:K' + sheet.getLastRow());
         const values = dataRange.getValues();
 
         let weeklyDRCount = 0;
         const weeklyTransmittalData = [];
         const monthlyData = {};
+        const yearlyData = {}; // Enhanced yearly tracking
         const drCountByMonth = {}; 
         const lateCountsByMonth = {}; 
+        const pendingRecords = []; // Centralized pending records collection
 
         const currentDate = new Date();
         const currentMonth = currentDate.getMonth(); 
@@ -448,11 +452,28 @@ function getDashboardData(storeName) {
             const status = row[6]; 
             const late = row[9]; 
             const drNumber = row[2]; 
+            const amount = parseFloat(row[5]) || 0;
+            const vendor = row[3];
+            const remarks = row[10] || '';
 
-            // Get month-year key for the current row's date
+            // Get month-year and year keys
             const monthYear = getMonthYearKey(drDate);
+            const year = drDate.getFullYear().toString();
 
-            // Initialize monthly data structure if it doesn't exist
+            // Initialize yearly data structure
+            if (!yearlyData[year]) {
+                yearlyData[year] = {
+                    totalDR: 0,
+                    totalAmount: 0,
+                    lateDR: 0,
+                    pendingCount: 0,
+                    receivedCount: 0,
+                    notReceivedCount: 0,
+                    vendors: {}
+                };
+            }
+
+            // Initialize monthly data structure
             if (!monthlyData[monthYear]) {
                 monthlyData[monthYear] = {
                     totalDR: 0,
@@ -460,71 +481,110 @@ function getDashboardData(storeName) {
                     pendingCount: 0,
                     receivedCount: 0,
                     notReceivedCount: 0,
-                    vendors: {} // Add a vendors object to track vendor counts
+                    totalAmount: 0,
+                    vendors: {},
+                    pendingRecords: [] // Add pending records array to monthly data
                 };
             }
 
-            if (drNumber) {
-                drCountByMonth[monthYear] = (drCountByMonth[monthYear] || 0) + 1;
-                monthlyData[monthYear].totalDR++;
-            }
-
+            // Tracking for weekly transmittal
             if (isDateInRange(drDate, currentWeekDates)) {
                 weeklyDRCount++;
                 weeklyTransmittalData.push({
                     ID: row[0],
                     Date: row[1],
                     'DR Number': drNumber,
-                    Vendor: row[3],
+                    Vendor: vendor,
                     Type: row[4],
-                    Amount: row[5],
+                    Amount: amount,
                     Status: status,
                     Transmitted: row[7],
                     Received: row[8], 
                     Late: late,
-                    Remarks: row[10]
+                    Remarks: remarks
                 });
             }
 
-            // Count statuses for the current month
+            // Comprehensive status tracking
             if (status === 'PENDING') {
+                // Create a standardized pending record object
+                const pendingRecord = {
+                    ID: row[0],
+                    Date: row[1],
+                    'DR Number': drNumber,
+                    Vendor: vendor,
+                    Type: row[4],
+                    Amount: amount,
+                    Status: status,
+                    Transmitted: row[7],
+                    Received: row[8],
+                    Late: late,
+                    Remarks: remarks,
+                    Year: year,
+                    MonthYear: monthYear
+                };
+
+                // Add to centralized pending records
+                pendingRecords.push(pendingRecord);
+
+                // Update monthly and yearly pending counts
                 monthlyData[monthYear].pendingCount++;
+                monthlyData[monthYear].pendingRecords.push(pendingRecord);
+                yearlyData[year].pendingCount++;
             }
+
+            // Other status and tracking logic remains the same
             if (status === 'RECEIVED') {
                 monthlyData[monthYear].receivedCount++;
+                yearlyData[year].receivedCount++;
             }
             if (status === 'NOT RECEIVED') {
                 monthlyData[monthYear].notReceivedCount++;
+                yearlyData[year].notReceivedCount++;
             }
 
+            // Vendor and DR tracking
+            if (drNumber) {
+                drCountByMonth[monthYear] = (drCountByMonth[monthYear] || 0) + 1;
+                monthlyData[monthYear].totalDR++;
+                monthlyData[monthYear].totalAmount += amount;
+                yearlyData[year].totalDR++;
+                yearlyData[year].totalAmount += amount;
+            }
+
+            // Vendor tracking
+            if (vendor) {
+                monthlyData[monthYear].vendors[vendor] = 
+                    (monthlyData[monthYear].vendors[vendor] || 0) + 1;
+                yearlyData[year].vendors[vendor] = 
+                    (yearlyData[year].vendors[vendor] || 0) + 1;
+            }
+
+            // Late DR tracking
             if (late === '✔') {
                 lateCountsByMonth[monthYear] = (lateCountsByMonth[monthYear] || 0) + 1;
                 monthlyData[monthYear].lateDR++;
-            }
-
-            // Count vendors for the current month
-            const vendor = row[3]; // Assuming Vendor is in column D (index 3)
-            if (vendor) {
-                monthlyData[monthYear].vendors[vendor] = (monthlyData[monthYear].vendors[vendor] || 0) + 1;
+                yearlyData[year].lateDR++;
             }
         });
 
         const lastThreeMonths = getLastThreeMonthsData(currentYear, currentMonth, monthlyData, lateCountsByMonth);
         const currentMonthKey = getMonthYearKey(new Date(currentYear, currentMonth, 1));
         
-        // Pass vendor counts from monthly data to the dashboard data
         const vendorCounts = monthlyData[currentMonthKey]?.vendors || {};
 
         const dashboardData = {
             drCount: drCountByMonth,
-            pendingCount: Object.values(monthlyData).reduce((sum, data) => sum + data.pendingCount, 0),
+            pendingCount: pendingRecords.length, // Use centralized pending records count
             receivedCount: Object.values(monthlyData).reduce((sum, data) => sum + data.receivedCount, 0),
             notReceivedCount: Object.values(monthlyData).reduce((sum, data) => sum + data.notReceivedCount, 0),
             lateCount: lateCountsByMonth,
             weeklyDRCount,
             weeklyTransmittalData,
             vendorCounts,
-            monthlyData: lastThreeMonths 
+            monthlyData: lastThreeMonths,
+            yearlyData: yearlyData,
+            pendingRecords: pendingRecords // Add centralized pending records to dashboard data
         };
 
         Logger.log(`Fetched data for store '${sheetName}':`, JSON.stringify(dashboardData));
@@ -541,7 +601,9 @@ function getDashboardData(storeName) {
             weeklyDRCount: 0,
             weeklyTransmittalData: [],
             vendorCounts: {},
-            monthlyData: []
+            monthlyData: [],
+            yearlyData: {},
+            pendingRecords: []
         });
     }
 }
